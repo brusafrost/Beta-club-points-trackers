@@ -1,0 +1,6 @@
+{
+  "name": "Beta Club Points Tracker",
+  "description": "High-capacity volunteer hours and points tracker for Beta Club members and officers with full Google Apps Script integration, roster management, proof gallery, and CSV exports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

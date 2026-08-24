@@ -1,0 +1,8 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn surge ./dist gwinnett-beta-tracker.surge.sh
+expect "email:"
+send "brusafrost@gmail.com\r"
+expect "password:"
+send "BetaTracker2026!\r"
+expect EOF

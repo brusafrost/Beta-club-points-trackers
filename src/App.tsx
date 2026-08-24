@@ -1,0 +1,233 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { AuthSession, Member, Submission, EventItem, Officer, AppConfig } from './types';
+import { BetaStorage } from './services/storage';
+import { Navbar } from './components/Navbar';
+import { LoginView } from './components/LoginView';
+import { StudentDashboard } from './components/StudentDashboard';
+import { SubmissionForm } from './components/SubmissionForm';
+import { MemberRoster } from './components/MemberRoster';
+import { PointsTrackerMatrix } from './components/PointsTrackerMatrix';
+import { DeepDiveCharts } from './components/DeepDiveCharts';
+import { OfficerDashboard } from './components/OfficerDashboard';
+import { StudentSettingsModal } from './components/StudentSettingsModal';
+import { ProofModal } from './components/ProofModal';
+import { GasDeploymentModal } from './components/GasDeploymentModal';
+import { MemberHistoryModal } from './components/MemberHistoryModal';
+
+export default function App() {
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [config, setConfig] = useState<AppConfig>(() => {
+    BetaStorage.initialize();
+    return BetaStorage.getConfig();
+  });
+  const [members, setMembers] = useState<Member[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [officers, setOfficers] = useState<Officer[]>([]);
+
+  const [activeSection, setActiveSection] = useState<string>('dashboard');
+  const [selectedProofSub, setSelectedProofSub] = useState<Submission | null>(null);
+  const [selectedHistoryMember, setSelectedHistoryMember] = useState<Member | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isGasModalOpen, setIsGasModalOpen] = useState<boolean>(false);
+
+  // Reload all state from BetaStorage
+  const refreshAllData = useCallback(() => {
+    setConfig(BetaStorage.getConfig());
+    setMembers(BetaStorage.getMembers());
+    setSubmissions(BetaStorage.getSubmissions());
+    setEvents(BetaStorage.getEvents());
+    setOfficers(BetaStorage.getOfficers());
+  }, []);
+
+  // Initialize app
+  useEffect(() => {
+    BetaStorage.initialize();
+    refreshAllData();
+    const savedSession = BetaStorage.getSession();
+    if (savedSession) {
+      setSession(savedSession);
+      setActiveSection(savedSession.isOfficer ? 'officer-dash' : 'dashboard');
+    }
+  }, [refreshAllData]);
+
+  const handleLoginSuccess = (newSession: AuthSession) => {
+    setSession(newSession);
+    refreshAllData();
+    setActiveSection(newSession.isOfficer ? 'officer-dash' : 'dashboard');
+  };
+
+  const handleLogout = () => {
+    BetaStorage.clearSession();
+    setSession(null);
+    setActiveSection('dashboard');
+  };
+
+  // Current logged in student profile
+  const currentMember = session && !session.isOfficer
+    ? members.find(m => m.email.toLowerCase().trim() === session.email.toLowerCase().trim()) || BetaStorage.getMemberByEmail(session.email) || null
+    : null;
+
+  const pendingCount = submissions.filter(s => s.status === 'Pending').length;
+
+  if (!session) {
+    return (
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-50 text-zinc-900 flex flex-col font-sans selection:bg-zinc-900 selection:text-white">
+      
+      {/* Outer Container */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+        
+        {/* Top Navbar */}
+        <Navbar
+          session={session}
+          config={config}
+          activeSection={activeSection}
+          onSelectSection={setActiveSection}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenGasCode={() => setIsGasModalOpen(true)}
+          onLogout={handleLogout}
+          pendingCount={pendingCount}
+        />
+
+        {/* Main Content Area */}
+        <main className="flex-1">
+          
+          {/* STUDENT DASHBOARD */}
+          {activeSection === 'dashboard' && currentMember && (
+            <StudentDashboard
+              member={currentMember}
+              submissions={submissions}
+              config={config}
+              onNavigateToSubmit={() => setActiveSection('submit')}
+              onViewProof={setSelectedProofSub}
+              onRefreshData={refreshAllData}
+            />
+          )}
+
+          {/* SUBMISSION FORM */}
+          {activeSection === 'submit' && currentMember && (
+            <SubmissionForm
+              member={currentMember}
+              events={events}
+              officers={officers}
+              config={config}
+              onSubmitSuccess={() => {
+                refreshAllData();
+                setActiveSection('dashboard');
+              }}
+            />
+          )}
+
+          {/* MEMBER ROSTER */}
+          {activeSection === 'roster' && (
+            <MemberRoster
+              members={members}
+              config={config}
+              isOfficer={session.isOfficer}
+              onRefresh={refreshAllData}
+              onViewHistory={setSelectedHistoryMember}
+            />
+          )}
+
+          {/* FULL POINTS TRACKER MATRIX */}
+          {activeSection === 'tracker' && (
+            <PointsTrackerMatrix
+              members={members}
+              submissions={submissions}
+              events={events}
+              config={config}
+            />
+          )}
+
+          {/* DEEP DIVE ANALYTICS & CHARTS (OFFICERS ONLY) */}
+          {activeSection === 'analytics' && session.isOfficer && (
+            <DeepDiveCharts
+              members={members}
+              submissions={submissions}
+              events={events}
+              config={config}
+              currentMember={currentMember}
+            />
+          )}
+
+          {/* OFFICER DASHBOARD */}
+          {activeSection === 'officer-dash' && session.isOfficer && (
+            <OfficerDashboard
+              members={members}
+              submissions={submissions}
+              events={events}
+              officers={officers}
+              config={config}
+              onRefresh={refreshAllData}
+              onViewProof={setSelectedProofSub}
+              onViewMemberHistory={setSelectedHistoryMember}
+            />
+          )}
+
+        </main>
+
+        {/* Minimalist Footer */}
+        <footer className="mt-8 py-4 px-6 rounded-2xl border border-zinc-200 bg-white text-zinc-500 text-xs">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+            <div>
+              <strong className="text-zinc-900">{config.clubName}</strong> &bull; {config.schoolName} ({config.academicYear})
+            </div>
+            <div className="flex items-center gap-3 font-mono">
+              <button
+                type="button"
+                onClick={() => setIsGasModalOpen(true)}
+                className="text-zinc-800 hover:text-zinc-950 font-semibold underline transition-colors"
+              >
+                GAS & Scalability Architecture
+              </button>
+              <span>&bull;</span>
+              <span>500 Members High-Concurrency Ready</span>
+            </div>
+          </div>
+        </footer>
+
+      </div>
+
+      {/* Modals */}
+      {currentMember && (
+        <StudentSettingsModal
+          member={currentMember}
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onProfileUpdated={() => {
+            refreshAllData();
+          }}
+        />
+      )}
+
+      {selectedHistoryMember && (
+        <MemberHistoryModal
+          member={selectedHistoryMember}
+          submissions={submissions}
+          config={config}
+          isOpen={Boolean(selectedHistoryMember)}
+          onClose={() => setSelectedHistoryMember(null)}
+          onViewProof={setSelectedProofSub}
+        />
+      )}
+
+      <ProofModal
+        submission={selectedProofSub}
+        onClose={() => setSelectedProofSub(null)}
+      />
+
+      <GasDeploymentModal
+        isOpen={isGasModalOpen}
+        onClose={() => setIsGasModalOpen(false)}
+      />
+
+    </div>
+  );
+}
