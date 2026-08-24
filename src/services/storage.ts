@@ -596,6 +596,17 @@ export class BetaStorage {
     return true;
   }
 
+  public static deleteSubmission(subId: string): { success: boolean; error?: string } {
+    const subs = this.getSubmissions();
+    const sub = subs.find(s => s.id === subId);
+    if (!sub) return { success: false, error: 'Submission not found.' };
+    
+    const filteredSubs = subs.filter(s => s.id !== subId);
+    this.set(STORAGE_KEYS.SUBMISSIONS, filteredSubs);
+    this.recalculateMemberPoints(sub.studentEmail);
+    return { success: true };
+  }
+
   public static archiveApprovedSubmissions(subIds?: string[]): { success: boolean; count: number } {
     const subs = this.getSubmissions();
     let count = 0;

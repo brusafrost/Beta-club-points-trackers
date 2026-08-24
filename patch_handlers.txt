@@ -1,0 +1,23 @@
+  const handleEditMemberSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember) return;
+    
+    // Quick custom update logic since BetaStorage.updateProfile doesn't update points
+    const members = BetaStorage.getMembers();
+    const mem = members.find(m => m.id === editingMember.id);
+    if (mem) {
+      mem.firstName = editMemFirstName.trim();
+      mem.lastName = editMemLastName.trim();
+      mem.name = `${mem.firstName} ${mem.lastName}`.trim();
+      mem.email = editMemEmail.toLowerCase().trim();
+      mem.gradeLevel = editMemGrade;
+      const pts = parseFloat(editMemPoints);
+      if (!isNaN(pts)) {
+        mem.totalPoints = Math.round(pts * 10) / 10;
+      }
+      BetaStorage.set('betaclub_members_v3', members);
+      showToast({ title: 'Member Updated', message: `Profile updated for ${mem.name}`, type: 'success' });
+      setEditingMember(null);
+      onRefresh();
+    }
+  };
