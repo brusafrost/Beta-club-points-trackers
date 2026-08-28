@@ -223,7 +223,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       mem.gradeLevel = editMemGrade;
       const pts = parseFloat(editMemPoints);
       if (!isNaN(pts)) mem.totalPoints = Math.round(pts * 10) / 10;
-      BetaStorage.set('betaclub_members_v3', members);
+      BetaStorage.updateProfile(mem.id, mem.firstName, mem.lastName, mem.email, mem.gradeLevel);
+if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'totalPoints', mem.totalPoints);
       showToast({ title: 'Member Updated', message: `Profile updated for ${mem.name}`, type: 'success' });
       setEditingMember(null);
       onRefresh();

@@ -11,7 +11,7 @@ import { DeepDiveCharts } from './components/DeepDiveCharts';
 import { OfficerDashboard } from './components/OfficerDashboard';
 import { StudentSettingsModal } from './components/StudentSettingsModal';
 import { ProofModal } from './components/ProofModal';
-
+import { GasDeploymentModal } from './components/GasDeploymentModal';
 import { MemberHistoryModal } from './components/MemberHistoryModal';
 
 export default function App() {
@@ -29,7 +29,7 @@ export default function App() {
   const [selectedProofSub, setSelectedProofSub] = useState<Submission | null>(null);
   const [selectedHistoryMember, setSelectedHistoryMember] = useState<Member | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  
+  const [isGasModalOpen, setIsGasModalOpen] = useState<boolean>(false);
 
   // Reload all state from BetaStorage
   const refreshAllData = useCallback(() => {
@@ -44,7 +44,6 @@ export default function App() {
   // Initialize app
   useEffect(() => {
     (async () => {
-      BetaStorage.setOnChange(refreshAllData);
       await BetaStorage.initialize();
       refreshAllData();
       const savedSession = BetaStorage.getSession();
@@ -96,7 +95,7 @@ export default function App() {
           activeSection={activeSection}
           onSelectSection={setActiveSection}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          
+          onOpenGasCode={() => setIsGasModalOpen(true)}
           onLogout={handleLogout}
           pendingCount={pendingCount}
         />
@@ -185,7 +184,13 @@ export default function App() {
               <strong className="text-zinc-900">{config.clubName}</strong> &bull; {config.schoolName} ({config.academicYear})
             </div>
             <div className="flex items-center gap-3 font-mono">
-              <span>Cloud Firestore Integrated</span>
+              <button
+                type="button"
+                onClick={() => setIsGasModalOpen(true)}
+                className="text-zinc-800 hover:text-zinc-950 font-semibold underline transition-colors"
+              >
+                GAS & Scalability Architecture
+              </button>
               <span>&bull;</span>
               <span>500 Members High-Concurrency Ready</span>
             </div>
@@ -222,7 +227,10 @@ export default function App() {
         onClose={() => setSelectedProofSub(null)}
       />
 
-      
+      <GasDeploymentModal
+        isOpen={isGasModalOpen}
+        onClose={() => setIsGasModalOpen(false)}
+      />
 
     </div>
   );

@@ -46,14 +46,14 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
     const res = BetaStorage.updateProfile(member.id, firstName, lastName, email, gradeLevel);
     setIsSaving(false);
 
-    if (res.success && res.member) {
+    if (res.success) {
       setProfileMsg({ type: 'success', text: 'Profile updated! All past submissions have been synced.' });
       showToast({
         title: 'Profile Updated',
         message: 'Your name, email, and grade level have been updated and synced.',
         type: 'success'
       });
-      onProfileUpdated(res.member);
+      onProfileUpdated();
     } else {
       setProfileMsg({ type: 'error', text: res.error || 'Failed to update profile.' });
       showToast({ title: 'Update Failed', message: res.error || 'Could not update profile.', type: 'error' });
