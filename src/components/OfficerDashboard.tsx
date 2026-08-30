@@ -36,6 +36,7 @@ import {
   HardDrive,
   Save
 } from 'lucide-react';
+import { AllStudentsMatrix } from './AllStudentsMatrix';
 
 interface OfficerDashboardProps {
   members: Member[];
@@ -60,7 +61,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 }) => {
   const { showToast } = useToast();
   // 4-tab layout: Inbox, Student History & Transcripts, Tools/Bonus, Settings
-  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students'>('inbox');
 
   // Filter within Inbox tab
   const [inboxFilter, setInboxFilter] = useState<'pending' | 'comments' | 'approved' | 'archived' | 'all'>('pending');
@@ -485,6 +486,19 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
 
           <button
             type="button"
+            onClick={() => setActiveTab('students')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'students'
+                ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>All Students & Points</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('tools')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'tools'
@@ -510,6 +524,18 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
           </button>
         </div>
       </div>
+
+      {/* TAB X: ALL STUDENTS MATRIX */}
+      {activeTab === 'students' && (
+        <div className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-5">
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900">All Students — Points by Event</h2>
+            <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
+          </div>
+
+          <AllStudentsMatrix members={members} submissions={submissions} events={events} />
+        </div>
+      )}
 
       {/* TAB 1: REVIEW QUEUE & INBOX */}
       {activeTab === 'inbox' && (

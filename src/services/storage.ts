@@ -227,9 +227,22 @@ export class BetaStorage {
   public static addSubmission(studentName: string, studentEmail: string, category: string, hours: number, date: string, assignedTo: string, proofUrl: string, comments?: string): { success: boolean; submission?: Submission; error?: string } {
     const calculatedPoints = Math.round(hours * localConfig.hoursRate * 10) / 10;
     const subId = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const finalCategory = category.trim();
+
+    // If this category isn't already present as an event, add it (non-beta) so it appears in pickers and the matrix
+    const exists = localEvents.some(e => e.name.toLowerCase() === finalCategory.toLowerCase());
+    if (!exists) {
+      try {
+        this.addEvent({ name: finalCategory, type: 'NONBETA', description: 'Added from submission' });
+      } catch (err) {
+        // Non-fatal: proceed with submission even if event creation fails
+        console.warn('Failed to auto-create event for submission category', finalCategory, err);
+      }
+    }
+
     const newSub: Submission = {
       id: subId, studentName: studentName.trim(), studentEmail: studentEmail.toLowerCase().trim(),
-      category: category.trim(), hours, points: calculatedPoints, date, assignedTo: assignedTo.trim() || 'Officer',
+      category: finalCategory, hours, points: calculatedPoints, date, assignedTo: assignedTo.trim() || 'Officer',
       proofUrl: proofUrl || '', status: 'Pending', timestamp: new Date().toISOString(), comments: comments ? comments.trim() : ''
     };
     setDoc(doc(db, 'submissions', subId), newSub);

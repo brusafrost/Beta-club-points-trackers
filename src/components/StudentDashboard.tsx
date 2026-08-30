@@ -21,9 +21,11 @@ import {
   Sparkles,
   ArrowUpRight,
   HelpCircle,
-  Check
+  Check,
+  User
 } from 'lucide-react';
 import { StudentCommentModal } from './StudentCommentModal';
+import { AllStudentsMatrix } from './AllStudentsMatrix';
 
 interface StudentDashboardProps {
   member: Member;
@@ -43,7 +45,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onRefreshData
 }) => {
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'submissions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'submissions' | 'students'>('overview');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Approved' | 'Pending' | 'Rejected'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
@@ -250,6 +252,19 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               {mySubs.length}
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('students')}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+              activeTab === 'students'
+                ? 'bg-white text-zinc-900 shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>All Students & Points</span>
+          </button>
         </div>
 
         {mySubs.length > 0 && (
@@ -429,6 +444,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
           </div>
 
+        </div>
+      )}
+
+      {/* TAB X: ALL STUDENTS MATRIX */}
+      {activeTab === 'students' && (
+        <div className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-5">
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900">All Students — Points by Event</h2>
+            <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
+          </div>
+
+          <AllStudentsMatrix members={allMembers} submissions={submissions} events={events} />
         </div>
       )}
 
