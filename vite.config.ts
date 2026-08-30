@@ -1,4 +1,3 @@
-import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
@@ -7,7 +6,9 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 export default defineConfig(() => {
   return {
     base: './',
-    plugins: [react(), tailwindcss(), viteSingleFile()],
+    // Use PostCSS (postcss.config.cjs) for Tailwind processing to avoid loading
+    // @tailwindcss/vite which depends on native optional bindings (@tailwindcss/oxide).
+    plugins: [react(), viteSingleFile()],
     esbuild: {
       charset: 'ascii',
     },
