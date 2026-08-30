@@ -24,9 +24,16 @@ jobs:
       - name: Install dependencies
         run: |
           set -e
-          echo "Installing dependencies (npm ci). If it fails, retry with npm install --no-optional and rebuild native modules."
-          npm ci || (echo "npm ci failed — retrying with npm install --no-optional" && npm install --no-optional)
-          echo "Attempting to rebuild native modules (if any)"
+          echo "Installing dependencies (try npm ci, fall back to removing package-lock and npm install --no-optional)"
+          if npm ci; then
+            echo "npm ci succeeded"
+          else
+            echo "npm ci failed — removing package-lock.json and node_modules, then npm install --no-optional"
+            rm -f package-lock.json
+            rm -rf node_modules
+            npm install --no-optional
+          fi
+          echo "Rebuilding native modules (if any)"
           npm rebuild --update-binary || true
         working-directory: .
 
