@@ -20,7 +20,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '16'
-          cache: 'pnpm'
+
+      - name: Enable corepack & pnpm
+        run: |
+          set -e
+          echo "Enabling corepack and activating pnpm"
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          echo "pnpm version:"
+          pnpm -v
 
       - name: Install dependencies
         run: |
