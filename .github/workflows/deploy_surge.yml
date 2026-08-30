@@ -22,7 +22,12 @@ jobs:
           node-version: '18'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          set -e
+          echo "Installing dependencies (npm ci). If it fails, retry with npm install --no-optional and rebuild native modules."
+          npm ci || (echo "npm ci failed — retrying with npm install --no-optional" && npm install --no-optional)
+          echo "Attempting to rebuild native modules (if any)"
+          npm rebuild --update-binary || true
         working-directory: .
 
       - name: Build
