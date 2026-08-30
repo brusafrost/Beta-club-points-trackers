@@ -20,26 +20,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '16'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: |
           set -e
-          echo "Installing dependencies (try npm ci, fall back to removing package-lock and npm install --no-optional)"
-          if npm ci; then
-            echo "npm ci succeeded"
+          echo "Enable corepack and install with pnpm"
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm -v
+          if test -f pnpm-lock.yaml; then
+            echo "Found pnpm-lock.yaml — installing with frozen lockfile"
+            pnpm install --frozen-lockfile
           else
-            echo "npm ci failed — removing package-lock.json and node_modules, then npm install --no-optional"
-            rm -f package-lock.json
-            rm -rf node_modules
-            npm install --no-optional
+            echo "No pnpm-lock.yaml — installing with pnpm"
+            pnpm install
           fi
-          echo "Rebuilding native modules (if any)"
-          npm rebuild --update-binary || true
         working-directory: .
 
       - name: Build
-        run: npm run build
+        run: |
+          set -e
+          echo "Building with pnpm"
+          pnpm build
         working-directory: .
 
       - name: Make deploy script executable
