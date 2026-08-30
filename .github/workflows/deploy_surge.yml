@@ -1,0 +1,40 @@
+name: Deploy to Surge
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - release/**
+      - brusafrost-fix-surge-sh
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: .
+
+      - name: Build
+        run: npm run build
+        working-directory: .
+
+      - name: Make deploy script executable
+        run: chmod +x ./surge.sh
+
+      - name: Deploy to Surge
+        env:
+          SURGE_TOKEN: ${{ secrets.SURGE_TOKEN }}
+          BUILD_DIR: ./dist
+          SURGE_DOMAIN: betaclub-gcps-live.surge.sh
+        run: ./surge.sh

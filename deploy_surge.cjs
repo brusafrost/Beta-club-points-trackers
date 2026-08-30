@@ -1,18 +1,17 @@
 const { spawn } = require('child_process');
-const surge = spawn('npx', ['surge', './dist', 'betaclub-gcps-live.surge.sh']);
-surge.stdout.on('data', (data) => {
-  const str = data.toString();
-  process.stdout.write(str);
-  if (str.toLowerCase().includes('email:')) {
-    surge.stdin.write('brusafrost.temp.surge@gmail.com\n');
-  }
-  if (str.toLowerCase().includes('password:')) {
-    surge.stdin.write('BetaClub123!@#\n');
-  }
-});
-surge.stderr.on('data', (data) => {
-  process.stderr.write(data.toString());
-});
-surge.on('close', (code) => {
+
+const buildDir = process.env.BUILD_DIR || './dist';
+const domain = process.env.SURGE_DOMAIN || 'betaclub-gcps-live.surge.sh';
+const token = process.env.SURGE_TOKEN;
+
+if (!token) {
+  console.error('SURGE_TOKEN env var is required for non-interactive deploys. Set SURGE_TOKEN and try again.');
+  process.exit(1);
+}
+
+const args = ['surge', buildDir, domain, '--token', token];
+const surge = spawn('npx', args, { stdio: 'inherit' });
+nsurge.on('close', (code) => {
   console.log(`Surge exited with code ${code}`);
+  process.exit(code);
 });

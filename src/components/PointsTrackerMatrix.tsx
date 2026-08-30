@@ -40,9 +40,16 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
       map[email][s.category] = (map[email][s.category] || 0) + (s.points || 0);
     });
 
+    const approvedCategories = new Set(approvedSubs.map(s => s.category));
+    const missingFromEvents = Array.from(approvedCategories).filter(cat => !events.some(e => e.name === cat));
+    const extraEvents = missingFromEvents.map((cat, idx) => ({ id: `custom-${idx}-${cat.replace(/[^a-z0-9]+/ig,'-')}`, name: cat, type: 'NONBETA' as const, description: 'Submission-only category' }));
+
     const activeEvents = eventFilter === 'ALL'
-      ? events
-      : events.filter(e => e.name === eventFilter);
+      ? [...events, ...extraEvents]
+      : // if filter matches an event name or a submission-only category, include it
+        (events.find(e => e.name === eventFilter)
+          ? events.filter(e => e.name === eventFilter)
+          : extraEvents.filter(e => e.name === eventFilter));
 
     let rows = members.map(m => {
       const email = m.email.toLowerCase().trim();
