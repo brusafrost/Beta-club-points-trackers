@@ -1,6 +1,6 @@
 import React from 'react';
 import { AuthSession, AppConfig } from '../types';
-import { Award, LogOut, Settings, ShieldCheck, User, PlusCircle, CheckCircle2, BarChart3, Users, Table } from 'lucide-react';
+import { Award, LogOut, Settings, ShieldCheck, User, PlusCircle, BarChart3, Users, Table } from 'lucide-react';
 
 interface NavbarProps {
   session: AuthSession | null;
@@ -24,10 +24,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   if (!session) return null;
 
   return (
-    <header className="bg-white p-3.5 sm:p-4 rounded-2xl border border-zinc-200 shadow-xs mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <header className="bg-white p-3.5 sm:p-4 rounded-2xl border border-zinc-200 shadow-xs mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:sticky md:top-4 md:z-30">
       {/* Brand Zone */}
       <div className="flex items-center gap-3">
-        <div>
+        <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center shadow-sm shrink-0">
+          <Award className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
           <h1 className="text-sm sm:text-base font-bold text-zinc-900 leading-tight">
             {config.clubName}
           </h1>

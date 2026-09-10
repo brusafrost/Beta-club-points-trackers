@@ -84,7 +84,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 flex flex-col selection:bg-zinc-900 selection:text-white">
+    <div className="portal-shell min-h-screen text-zinc-900 flex flex-col selection:bg-zinc-900 selection:text-white">
       
       {/* Outer Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">

@@ -128,7 +128,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-6 px-4">
+    <div className="portal-login min-h-[85vh] flex items-center justify-center py-6 px-4">
       <div className="w-full max-w-md bg-white rounded-2xl border border-zinc-200 shadow-xs p-6 sm:p-8 space-y-6 animate-in fade-in duration-200">
         
         {/* Brand Top - Clean Typography Wordmark */}
