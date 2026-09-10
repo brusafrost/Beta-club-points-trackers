@@ -233,7 +233,7 @@ export class BetaStorage {
   }
 
   // ---- SUBMISSIONS & POINTS ----
-  public static addSubmission(studentName: string, studentEmail: string, category: string, hours: number, date: string, assignedTo: string, proofUrl: string, comments?: string): { success: boolean; submission?: Submission; error?: string } {
+  public static addSubmission(studentName: string, studentEmail: string, category: string, hours: number, date: string, assignedTo: string, proofUrl: string, comments?: string, studentId?: string): { success: boolean; submission?: Submission; error?: string } {
     const calculatedPoints = Math.round(hours * localConfig.hoursRate * 10) / 10;
     const subId = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const finalCategory = category.trim();
@@ -250,7 +250,7 @@ export class BetaStorage {
     }
 
     const newSub: Submission = {
-      id: subId, studentName: studentName.trim(), studentEmail: studentEmail.toLowerCase().trim(),
+      id: subId, studentName: studentName.trim(), studentId: studentId?.trim(), studentEmail: studentEmail.toLowerCase().trim(),
       category: finalCategory, hours, points: calculatedPoints, date, assignedTo: assignedTo.trim() || 'Officer',
       proofUrl: proofUrl || '', status: 'Pending', timestamp: new Date().toISOString(), comments: comments ? comments.trim() : ''
     };
@@ -258,8 +258,8 @@ export class BetaStorage {
     return { success: true, submission: newSub };
   }
 
-  public static addDirectCommentToOfficers(studentName: string, studentEmail: string, inquiryTopic: string, comments: string, assignedTo?: string): { success: boolean; submission?: Submission; error?: string } {
-    return this.addSubmission(studentName, studentEmail, inquiryTopic || 'Direct Officer Inquiry', 0, new Date().toISOString().split('T')[0], assignedTo || 'Officer', '', comments);
+  public static addDirectCommentToOfficers(studentName: string, studentEmail: string, inquiryTopic: string, comments: string, assignedTo?: string, studentId?: string): { success: boolean; submission?: Submission; error?: string } {
+    return this.addSubmission(studentName, studentEmail, inquiryTopic || 'Direct Officer Inquiry', 0, new Date().toISOString().split('T')[0], assignedTo || 'Officer', '', comments, studentId);
   }
 
   public static updateSubmissionOfficerNotes(subId: string, notes: string): { success: boolean; error?: string } {
@@ -284,7 +284,7 @@ export class BetaStorage {
   public static approveSubmission(subId: string, customPoints?: number, notes?: string): { success: boolean; actualPoints: number; capMsg?: string; error?: string } {
     const sub = localSubmissions.find(s => s.id === subId);
     if (!sub) return { success: false, actualPoints: 0, error: 'Not found' };
-    const member = this.getMemberByEmail(sub.studentEmail);
+    const member = sub.studentId ? this.getMemberById(sub.studentId) : this.getMemberByEmail(sub.studentEmail);
     const requested = typeof customPoints === 'number' && !isNaN(customPoints) ? customPoints : sub.points;
     const currentPoints = member ? member.totalPoints : 0;
     const cap = localConfig.pointCap;

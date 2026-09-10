@@ -20,9 +20,9 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
     const studentsMap: Record<string, Record<string, number>> = {};
 
     approved.forEach(s => {
-      const email = s.studentEmail.toLowerCase().trim();
-      if (!studentsMap[email]) studentsMap[email] = {};
-      studentsMap[email][s.category] = (studentsMap[email][s.category] || 0) + (s.points || 0);
+      const key = s.studentId || s.studentEmail.toLowerCase().trim();
+      if (!studentsMap[key]) studentsMap[key] = {};
+      studentsMap[key][s.category] = (studentsMap[key][s.category] || 0) + (s.points || 0);
     });
 
     // Include all events plus any submission-only categories
@@ -31,8 +31,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
     const allEvents = [...events.map(e => e.name), ...extraCats];
 
     const rows = members.map(m => {
-      const email = m.email.toLowerCase().trim();
-      const map = studentsMap[email] || {};
+      const key = m.studentId || m.email.toLowerCase().trim();
+      const map = studentsMap[key] || {};
       const cells = allEvents.map(ev => ({ event: ev, points: map[ev] || 0 }));
       return { member: m, cells, total: cells.reduce((s, c) => s + c.points, 0) };
     });

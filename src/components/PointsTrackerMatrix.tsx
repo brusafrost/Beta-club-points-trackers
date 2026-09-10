@@ -35,11 +35,11 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
     const map: Record<string, Record<string, number>> = {};
 
     approvedSubs.forEach(s => {
-      const email = s.studentEmail.toLowerCase().trim();
-      if (!map[email]) {
-        map[email] = {};
+      const key = s.studentId || s.studentEmail.toLowerCase().trim();
+      if (!map[key]) {
+        map[key] = {};
       }
-      map[email][s.category] = (map[email][s.category] || 0) + (s.points || 0);
+      map[key][s.category] = (map[key][s.category] || 0) + (s.points || 0);
     });
 
     const approvedCategories = new Set<string>(approvedSubs.map(s => s.category));
@@ -54,8 +54,8 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
           : extraEvents.filter(e => e.name === eventFilter));
 
     let rows = members.map(m => {
-      const email = m.email.toLowerCase().trim();
-      const studentEvents = map[email] || {};
+      const key = m.studentId || m.email.toLowerCase().trim();
+      const studentEvents = map[key] || {};
       return {
         ...m,
         eventPoints: studentEvents

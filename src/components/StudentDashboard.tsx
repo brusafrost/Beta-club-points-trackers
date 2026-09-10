@@ -58,7 +58,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const mySubs = useMemo(() => {
     return submissions.filter(
-      s => s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()
+      s => s.studentId ? s.studentId === member.studentId : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()
     );
   }, [submissions, member.email]);
 

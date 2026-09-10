@@ -98,7 +98,8 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
         date,
         assignedTo || 'Officer',
         proofUrl,
-        comments
+        comments,
+        member.studentId
       );
 
       if (!result.success) {

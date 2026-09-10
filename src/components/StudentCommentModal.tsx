@@ -45,7 +45,8 @@ export const StudentCommentModal: React.FC<StudentCommentModalProps> = ({
         member.email,
         topic,
         commentText.trim(),
-        assignedOfficer
+        assignedOfficer,
+        member.studentId
       );
 
       if (res.success) {

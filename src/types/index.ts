@@ -17,6 +17,7 @@ export type SubmissionStatus = 'Pending' | 'Approved' | 'Rejected';
 export interface Submission {
   id: string;
   studentName: string;
+  studentId?: string;
   studentEmail: string;
   category: string;
   hours: number;

@@ -29,7 +29,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
 
   const memberSubs = useMemo(() => {
     return submissions
-      .filter(s => s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim())
+      .filter(s => s.studentId ? s.studentId === member.studentId : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim())
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [submissions, member.email]);
 
