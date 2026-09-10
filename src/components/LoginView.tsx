@@ -367,7 +367,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 </button>
               </div>
               <p className="text-[11px] font-mono text-zinc-500">
-                Authorized chapter sponsors & officers only. Default: <code className="bg-zinc-100 px-1 py-0.5 rounded text-zinc-800 font-bold">12345678</code>
+                Authorized chapter sponsors and officers only.
               </p>
             </div>
 
