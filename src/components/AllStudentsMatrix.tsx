@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Member, Submission, EventItem } from '../types';
-import { Search, Download } from 'lucide-react';
+import { Search, Download, BarChart3 } from 'lucide-react';
 
 interface Props {
   members: Member[];
@@ -57,6 +57,13 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
 
+  const chartMax = Math.max(...sorted.map(row => row.total), 1);
+  const chartEvents = displayEvents.slice(0, 8);
+  const eventColors = [
+    'bg-zinc-800', 'bg-emerald-600', 'bg-sky-600', 'bg-amber-500',
+    'bg-rose-600', 'bg-indigo-600', 'bg-teal-600', 'bg-orange-500'
+  ];
+
   const handleExportCSV = () => {
     const headers = ['Name', 'Email', 'Grade', 'Student ID', ...displayEvents, 'Total Points'];
     const rows = sorted.map(r => [
@@ -97,6 +104,49 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
           </button>
         </div>
       </div>
+
+      {sorted.length > 0 && chartEvents.length > 0 && (
+        <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+                <BarChart3 className="w-4 h-4" /> Points by Student and Event
+              </h3>
+              <p className="text-[11px] text-zinc-500 font-mono">Each bar shows the approved points that make up the student total.</p>
+            </div>
+            <span className="text-[11px] text-zinc-500 font-mono shrink-0">Scale: {chartMax.toFixed(1)} pts</span>
+          </div>
+          <div className="space-y-2.5">
+            {pageRows.slice(0, 12).map(row => (
+              <div key={`chart-${row.member.id}`} className="grid grid-cols-[minmax(92px,160px)_1fr_52px] items-center gap-2 text-[11px]">
+                <span className="truncate font-semibold text-zinc-800" title={row.member.name}>{row.member.name}</span>
+                <div className="h-4 flex rounded-md overflow-hidden bg-zinc-200" title={`${row.total.toFixed(1)} total points`}>
+                  {chartEvents.map((event, index) => {
+                    const points = row.cells.find(cell => cell.event === event.name)?.points || 0;
+                    return points > 0 ? (
+                      <div
+                        key={`${row.member.id}-${event.name}`}
+                        className={`${eventColors[index % eventColors.length]} h-full`}
+                        style={{ width: `${(points / chartMax) * 100}%` }}
+                        title={`${event.name}: ${points.toFixed(1)} pts`}
+                      />
+                    ) : null;
+                  })}
+                </div>
+                <span className="text-right font-mono font-bold text-zinc-900">{row.total.toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-4 pt-3 border-t border-zinc-200">
+            {chartEvents.map((event, index) => (
+              <span key={`legend-${event.name}`} className="flex items-center gap-1 text-[10px] text-zinc-600" title={event.name}>
+                <span className={`w-2 h-2 rounded-sm ${eventColors[index % eventColors.length]}`} />
+                <span className="max-w-[150px] truncate">{event.name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
