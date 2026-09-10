@@ -17,6 +17,7 @@ let localConfig: AppConfig = {
   academicYear: '2023-2024',
   schoolName: 'Anytown High School'
 };
+const DEFAULT_OFFICER_CODE = '12345678';
 let onChangeCallback: (() => void) | null = null;
 let initialized = false;
 
@@ -140,8 +141,9 @@ export class BetaStorage {
   }
 
   public static loginOfficer(code: string): { success: boolean; error?: string; token?: string } {
-    const enteredCode = code.trim();
-    if (enteredCode === localConfig.officerCode || enteredCode === '12345678' || enteredCode === 'beta4216' || enteredCode === 'BETA2024') {
+    const enteredCode = code.trim().toLowerCase();
+    const configuredCode = String(localConfig.officerCode || '').trim().toLowerCase();
+    if (enteredCode === configuredCode || enteredCode === DEFAULT_OFFICER_CODE) {
       const session: AuthSession = { token: `tok-${Date.now()}`, email: 'officer@school.edu', isOfficer: true, name: 'Officer' };
       this.saveSession(session);
       return { success: true, token: session.token };

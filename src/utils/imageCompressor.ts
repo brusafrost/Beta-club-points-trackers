@@ -1,6 +1,6 @@
 /**
  * Client-side high efficiency image compressor for service slips & verification photos.
- * Downscales oversized camera uploads (e.g. 12MP/5MB photos) to a crisp, high-legibility
+ * Downscales oversized image uploads (e.g. 12MP/5MB photos) to a crisp, high-legibility
  * slip thumbnail / proof (max 1200px dimension, JPEG 0.78 quality, ~100-180KB).
  */
 export async function compressProofImage(file: File, maxDimension: number = 1200, quality: number = 0.78): Promise<string> {
