@@ -1,10 +1,11 @@
 
-import { Member, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus } from '../types';
+import { Member, DeletedMember, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus } from '../types';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Local cache
 let localMembers: Member[] = [];
+let localDeletedMembers: DeletedMember[] = [];
 let localSubmissions: Submission[] = [];
 let localEvents: EventItem[] = [];
 let localOfficers: Officer[] = [];
@@ -50,6 +51,12 @@ export class BetaStorage {
       triggerChange();
     });
 
+    onSnapshot(collection(db, 'deletedMembers'), (snap) => {
+      localDeletedMembers = snap.docs.map(d => d.data() as DeletedMember);
+      localDeletedMembers.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+      triggerChange();
+    });
+
     // Listen to submissions
     onSnapshot(collection(db, 'submissions'), (snap) => {
       localSubmissions = snap.docs.map(d => d.data() as Submission);
@@ -73,6 +80,7 @@ export class BetaStorage {
   // ---- SYNCHRONOUS GETTERS ----
   public static getConfig(): AppConfig { return localConfig; }
   public static getMembers(): Member[] { return [...localMembers]; }
+  public static getDeletedMembers(): DeletedMember[] { return [...localDeletedMembers]; }
   public static getMemberById(id: string): Member | undefined { return localMembers.find(m => m.id === id); }
   public static getMemberByEmail(email: string): Member | undefined { return localMembers.find(m => m.email.toLowerCase() === email.toLowerCase()); }
   public static getSubmissions(): Submission[] { return [...localSubmissions]; }
@@ -186,14 +194,26 @@ export class BetaStorage {
   }
 
   public static removeMember(id: string): void {
-    deleteDoc(doc(db, 'members', id));
     const member = this.getMemberById(id);
     if (!member) return;
+    const archive: DeletedMember = { ...member, deletedAt: new Date().toISOString() };
     const batch = writeBatch(db);
+    batch.set(doc(db, 'deletedMembers', `${member.id}-${archive.deletedAt}`), archive);
+    batch.delete(doc(db, 'members', id));
     localSubmissions
       .filter(sub => sub.studentId === member.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === member.email.toLowerCase()))
       .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
     batch.commit();
+  }
+
+  public static restoreMember(archiveId: string): { success: boolean; error?: string } {
+    const archive = localDeletedMembers.find(member => `${member.id}-${member.deletedAt}` === archiveId);
+    if (!archive) return { success: false, error: 'Archived member not found.' };
+    const { deletedAt, ...member } = archive;
+    if (this.getMemberById(member.id)) return { success: false, error: 'A current member already uses this record.' };
+    setDoc(doc(db, 'members', member.id), member);
+    deleteDoc(doc(db, 'deletedMembers', archiveId));
+    return { success: true };
   }
 
   public static bulkImportMembers(rawText: string): { added: number; updated: number; merged: number } {

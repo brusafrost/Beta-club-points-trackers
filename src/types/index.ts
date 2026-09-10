@@ -12,6 +12,10 @@ export interface Member {
   createdAt?: string;
 }
 
+export interface DeletedMember extends Member {
+  deletedAt: string;
+}
+
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface Submission {

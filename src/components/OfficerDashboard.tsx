@@ -62,7 +62,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 }) => {
   const { showToast } = useToast();
   // 4-tab layout: Inbox, Student History & Transcripts, Tools/Bonus, Settings
-  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students' | 'roster'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students' | 'roster' | 'deleted'>('inbox');
 
   // Filter within Inbox tab
   const [inboxFilter, setInboxFilter] = useState<'pending' | 'comments' | 'approved' | 'archived' | 'all'>('pending');
@@ -511,6 +511,17 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
 
           <button
             type="button"
+            onClick={() => setActiveTab('deleted')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'deleted' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>Deleted Members ({BetaStorage.getDeletedMembers().length})</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('tools')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'tools'
@@ -557,6 +568,39 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
           onRefresh={onRefresh}
           onViewHistory={onViewMemberHistory}
         />
+      )}
+
+      {activeTab === 'deleted' && (
+        <div className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900">Deleted Member Archive</h2>
+            <p className="text-xs text-zinc-500 font-mono">Online backups available to every authorized officer.</p>
+          </div>
+          {BetaStorage.getDeletedMembers().length === 0 ? (
+            <p className="p-8 text-center text-xs text-zinc-500 font-mono border border-dashed border-zinc-200 rounded-xl">No deleted member backups.</p>
+          ) : (
+            <div className="space-y-2">
+              {BetaStorage.getDeletedMembers().map(archive => (
+                <div key={`${archive.id}-${archive.deletedAt}`} className="flex items-center justify-between gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-200">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm text-zinc-900 truncate">{archive.name}</div>
+                    <div className="text-[11px] text-zinc-500 font-mono">ID: {archive.studentId || 'No ID'} | Deleted {formatFriendlyTimestamp(archive.deletedAt)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const result = BetaStorage.restoreMember(`${archive.id}-${archive.deletedAt}`);
+                      showToast({ title: result.success ? 'Member Restored' : 'Restore Failed', message: result.success ? `${archive.name} returned to the active roster.` : result.error || 'Could not restore member.', type: result.success ? 'success' : 'error' });
+                      onRefresh();
+                    }}
+                    className="px-3 py-1.5 bg-zinc-900 text-white rounded-lg text-xs font-semibold shrink-0"
+                  >Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* TAB 1: REVIEW QUEUE & INBOX */}
