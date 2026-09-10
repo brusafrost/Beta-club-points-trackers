@@ -533,7 +533,7 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
             <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
           </div>
 
-          <AllStudentsMatrix members={members} submissions={submissions} events={events} />
+          <AllStudentsMatrix members={members} submissions={submissions} events={events} isOfficer />
         </div>
       )}
 

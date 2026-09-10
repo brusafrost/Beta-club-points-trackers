@@ -8,20 +8,22 @@ interface PointsTrackerMatrixProps {
   submissions: Submission[];
   events: EventItem[];
   config: AppConfig;
+  isOfficer?: boolean;
 }
 
 export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   members,
   submissions,
   events,
-  config
+  config,
+  isOfficer = false
 }) => {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [eventFilter, setEventFilter] = useState<string>('ALL');
   const [gradeFilter, setGradeFilter] = useState<string>('ALL');
-  const [sortField, setSortField] = useState<'name' | 'points'>('points');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<'name' | 'points'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState<number>(1);
   const pageSize = 25;
 
@@ -93,12 +95,12 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   }, [filteredRows, page, pageSize]);
 
   const handleExportMatrixCSV = () => {
-    const headers = ['Student Name', 'Email', 'Grade', 'Student ID', ...displayEvents.map(e => `"${e.name.replace(/"/g, '""')}"`), 'Total Points', 'Point Cap'];
+    const headers = ['Student Name', ...(isOfficer ? ['Email', 'Student ID'] : []), 'Grade', ...displayEvents.map(e => `"${e.name.replace(/"/g, '""')}"`), 'Total Points', 'Point Cap'];
     const rows = filteredRows.map(row => {
       const eventCols = displayEvents.map(e => (row.eventPoints[e.name] ? row.eventPoints[e.name].toFixed(1) : '0.0'));
       return [
         `"${row.name.replace(/"/g, '""')}"`,
-        `"${row.email.replace(/"/g, '""')}"`,
+        ...(isOfficer ? [`"${row.email.replace(/"/g, '""')}"`, row.studentId || ''] : []),
         row.gradeLevel || 11,
         row.studentId || '',
         ...eventCols,
@@ -168,7 +170,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
               setSearchQuery(e.target.value);
               setPage(1);
             }}
-            placeholder="Search student name, email, or ID..."
+            placeholder={isOfficer ? 'Search student name, email, or ID...' : 'Search student name or grade...'}
             className="w-full pl-9 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500"
           />
         </div>
@@ -264,7 +266,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
                     <tr key={row.id} className="hover:bg-zinc-50/80 transition-colors">
                       <td className="py-2.5 px-4 sticky left-0 bg-white group-hover:bg-zinc-50 z-10 border-r border-zinc-100">
                         <div className="font-sans font-bold text-zinc-900 truncate max-w-[170px]">{row.name}</div>
-                        <div className="text-[10px] text-zinc-400 truncate max-w-[170px]">{row.email}</div>
+                        {isOfficer && <div className="text-[10px] text-zinc-400 truncate max-w-[170px]">{row.email || 'No email'}</div>}
                       </td>
                       <td className="py-2.5 px-3 text-zinc-600">
                         {row.gradeLevel || 11}th

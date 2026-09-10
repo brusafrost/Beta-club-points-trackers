@@ -44,8 +44,8 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
   const [search, setSearch] = useState<string>('');
   const [gradeFilter, setGradeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('ALL');
-  const [sortField, setSortField] = useState<'name' | 'points' | 'grade' | 'id'>('points');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<'name' | 'points' | 'grade' | 'id'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState<number>(1);
   const pageSize = 25;
 
@@ -154,6 +154,10 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
         return sortOrder === 'asc' ? -comp : comp;
       }
     });
+
+    if (!isOfficer) {
+      result.sort((a, b) => a.name.localeCompare(b.name));
+    }
 
     return result;
   }, [members, gradeFilter, statusFilter, search, sortField, sortOrder, cap, nearCapThreshold]);
@@ -548,7 +552,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-zinc-100/80 text-zinc-700 font-mono text-[11px] uppercase border-b border-zinc-200">
               <tr>
-                <th className="py-3 px-4 min-w-[80px]">
+                {isOfficer && <th className="py-3 px-4 min-w-[80px]">
                   <button
                     type="button"
                     onClick={() => toggleSort('id')}
@@ -557,7 +561,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
                     <span>ID</span>
                     <ArrowUpDown className="w-3 h-3" />
                   </button>
-                </th>
+                </th>}
                 <th className="py-3 px-4 min-w-[220px]">
                   <button
                     type="button"
@@ -595,7 +599,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
             <tbody className="divide-y divide-zinc-100 font-mono">
               {paginatedMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-zinc-500 font-sans text-xs">
+                  <td colSpan={isOfficer ? 6 : 5} className="py-12 text-center text-zinc-500 font-sans text-xs">
                     <div className="max-w-xs mx-auto space-y-2">
                       <p className="font-semibold text-zinc-800">No members found</p>
                       <p className="text-zinc-400 font-mono text-[11px]">
@@ -622,10 +626,9 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
 
                   return (
                     <tr key={m.id} className="hover:bg-zinc-50/80 transition-colors">
-                      {/* Student ID */}
-                      <td className="py-2.5 px-4 text-zinc-500 text-[11px]">
-                        {m.studentId || `STU${1000 + (page - 1) * pageSize + idx + 1}`}
-                      </td>
+                      {isOfficer && <td className="py-2.5 px-4 text-zinc-500 text-[11px]">
+                        {m.studentId || 'ID pending'}
+                      </td>}
                       
                       {/* Name & Email */}
                       <td className="py-2.5 px-4">

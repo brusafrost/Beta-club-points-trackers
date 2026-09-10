@@ -148,6 +148,7 @@ export default function App() {
               submissions={submissions}
               events={events}
               config={config}
+              isOfficer={session.isOfficer}
             />
           )}
 

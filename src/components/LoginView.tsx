@@ -29,6 +29,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [successMsg, setSuccessMsg] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const isValidStudentId = (value: string) => /^\d{9,10}$/.test(value.trim());
+
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -36,8 +38,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     if (studentMode === 'register') {
-      if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim()) {
+      if (!firstName.trim() || !lastName.trim() || !studentId.trim()) {
         setErrorMsg('Please fill in all required fields.');
+        setIsLoading(false);
+        return;
+      }
+      if (!isValidStudentId(studentId)) {
+        setErrorMsg('Student ID must contain 9 or 10 numbers.');
         setIsLoading(false);
         return;
       }
@@ -73,6 +80,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       // Sign in mode
       if (!studentId.trim()) {
         setErrorMsg('Please enter your student ID.');
+        setIsLoading(false);
+        return;
+      }
+      if (!isValidStudentId(studentId)) {
+        setErrorMsg('Student ID must contain 9 or 10 numbers.');
         setIsLoading(false);
         return;
       }
@@ -244,13 +256,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-semibold text-zinc-700">Student ID</label>
+                    <label className="font-semibold text-zinc-700">Student ID (9–10 numbers)</label>
                     <input
                       type="text"
                       required
                       value={studentId}
                       onChange={e => setStudentId(e.target.value)}
-                      placeholder="STU1001"
+                      placeholder="123456789"
                       className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
                     />
                   </div>
@@ -272,13 +284,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               )}
 
               <div className="space-y-1">
-                <label className="font-semibold text-zinc-700">{studentMode === 'register' ? 'School Email Address' : 'Student ID'}</label>
+                <label className="font-semibold text-zinc-700">{studentMode === 'register' ? 'Email Address (Optional)' : 'Student ID (9–10 numbers)'}</label>
                 <input
                   type={studentMode === 'register' ? 'email' : 'text'}
-                  required
+                  required={studentMode === 'signin'}
                   value={studentMode === 'register' ? email : studentId}
                   onChange={e => studentMode === 'register' ? setEmail(e.target.value) : setStudentId(e.target.value)}
-                  placeholder={studentMode === 'register' ? 'student@school.edu' : 'STU1001'}
+                  placeholder={studentMode === 'register' ? 'student@school.edu' : '123456789'}
                   className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
                 />
               </div>

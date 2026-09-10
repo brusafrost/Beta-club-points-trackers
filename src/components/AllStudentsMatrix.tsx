@@ -6,9 +6,10 @@ interface Props {
   members: Member[];
   submissions: Submission[];
   events: EventItem[];
+  isOfficer?: boolean;
 }
 
-export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events }) => {
+export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, isOfficer = false }) => {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 25;
@@ -51,7 +52,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
   }, [rows, query]);
 
   const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => b.total - a.total);
+    return [...filtered].sort((a, b) => a.member.name.localeCompare(b.member.name));
   }, [filtered]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -65,12 +66,11 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
   ];
 
   const handleExportCSV = () => {
-    const headers = ['Name', 'Email', 'Grade', 'Student ID', ...displayEvents, 'Total Points'];
+    const headers = ['Name', ...(isOfficer ? ['Email', 'Student ID'] : []), 'Grade', ...displayEvents, 'Total Points'];
     const rows = sorted.map(r => [
       `"${r.member.name.replace(/"/g, '""')}"`,
-      `"${(r.member.email || '').replace(/"/g, '""')}"`,
+      ...(isOfficer ? [`"${(r.member.email || '').replace(/"/g, '""')}"`, r.member.studentId || ''] : []),
       r.member.gradeLevel || '',
-      r.member.studentId || '',
       ...r.cells.map(c => (c.points || 0).toFixed(1)),
       r.total.toFixed(1)
     ]);
@@ -152,9 +152,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
         <table className="w-full text-left text-xs border-collapse">
           <thead className="text-zinc-700 font-mono text-[11px] uppercase border-b border-zinc-200">
             <tr>
-              <th className="py-2 px-3">#</th>
               <th className="py-2 px-3">Student</th>
-              <th className="py-2 px-3">Email</th>
+              {isOfficer && <th className="py-2 px-3">Email</th>}
               <th className="py-2 px-3">Grade</th>
               {displayEvents.map((ev, i) => (
                 <th key={i} className="py-2 px-3 text-right min-w-[110px]">{ev}</th>
@@ -165,9 +164,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
           <tbody className="divide-y divide-zinc-100">
             {pageRows.map((r, idx) => (
               <tr key={r.member.id} className="hover:bg-zinc-50 transition-colors">
-                <td className="py-2 px-3">{(page - 1) * pageSize + idx + 1}</td>
                 <td className="py-2 px-3 font-semibold text-zinc-900">{r.member.name}</td>
-                <td className="py-2 px-3 text-zinc-600">{r.member.email}</td>
+                {isOfficer && <td className="py-2 px-3 text-zinc-600">{r.member.email || 'No email'}</td>}
                 <td className="py-2 px-3 text-zinc-600">{r.member.gradeLevel || ''}</td>
                 {r.cells.map((c, i) => (
                   <td key={i} className="py-2 px-3 text-right">{c.points > 0 ? c.points.toFixed(1) : '-'}</td>

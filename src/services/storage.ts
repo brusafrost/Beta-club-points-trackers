@@ -123,6 +123,7 @@ export class BetaStorage {
     const snap = await getDocs(collection(db, 'members'));
     const members = snap.docs.map(d => d.data() as Member);
     const normalizedId = studentId.trim().toLowerCase();
+    if (!/^\d{9,10}$/.test(studentId.trim())) return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
     const member = members.find(m => (m.studentId || '').trim().toLowerCase() === normalizedId);
     if (!member) return { success: false, error: 'Student ID not found.' };
     const session: AuthSession = { token: `tok-${Date.now()}`, email: member.email, isOfficer: false, memberId: member.id, name: member.name };
@@ -141,16 +142,19 @@ export class BetaStorage {
 
   public static async registerMember(firstName: string, lastName: string, studentId: string, email: string, password?: string, gradeLevel: number = 11): Promise<{ success: boolean; member?: Member; error?: string }> {
     const normalizedStudentId = studentId.trim().toUpperCase();
+    if (!/^\d{9,10}$/.test(studentId.trim())) {
+      return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
+    }
     if (localMembers.some(m => (m.studentId || '').toLowerCase() === normalizedStudentId.toLowerCase())) {
       return { success: false, error: 'Student ID already exists.' };
     }
-    if (localMembers.some(m => m.email.toLowerCase() === email.toLowerCase())) {
+    if (email.trim() && localMembers.some(m => m.email.toLowerCase() === email.toLowerCase())) {
       return { success: false, error: 'Email already exists.' };
     }
     const fullName = `${firstName} ${lastName}`.trim();
     const newMember: Member = {
       id: `mem-${Date.now()}`,
-      firstName, lastName, name: fullName, email: email.toLowerCase(),
+      firstName, lastName, name: fullName, email: email.trim().toLowerCase(),
       totalPoints: 0, gradeLevel, studentId: normalizedStudentId,
       hasPassword: !!password, createdAt: new Date().toISOString()
     };
@@ -213,7 +217,7 @@ export class BetaStorage {
           const newId = `mem-${Date.now()}-${Math.random().toString(36).substring(2,6)}`;
           batch.set(doc(db, 'members', newId), {
             id: newId, firstName, lastName, name: fullName, email: emailPart,
-            totalPoints: 0, gradeLevel: 11, studentId: `STU${1000 + Math.floor(Math.random()*1000)}`,
+            totalPoints: 0, gradeLevel: 11, studentId: String(100000000 + Math.floor(Math.random() * 900000000)),
             hasPassword: false, createdAt: new Date().toISOString()
           });
           added++;
