@@ -58,7 +58,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
   const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const chartMax = Math.max(...sorted.map(row => row.total), 1);
-  const chartEvents = displayEvents.slice(0, 8);
+  const chartEvents = displayEvents;
   const eventColors = [
     'bg-zinc-800', 'bg-emerald-600', 'bg-sky-600', 'bg-amber-500',
     'bg-rose-600', 'bg-indigo-600', 'bg-teal-600', 'bg-orange-500'
@@ -116,8 +116,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
             </div>
             <span className="text-[11px] text-zinc-500 font-mono shrink-0">Scale: {chartMax.toFixed(1)} pts</span>
           </div>
-          <div className="space-y-2.5">
-            {pageRows.slice(0, 12).map(row => (
+          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+            {sorted.map(row => (
               <div key={`chart-${row.member.id}`} className="grid grid-cols-[minmax(92px,160px)_1fr_52px] items-center gap-2 text-[11px]">
                 <span className="truncate font-semibold text-zinc-800" title={row.member.name}>{row.member.name}</span>
                 <div className="h-4 flex rounded-md overflow-hidden bg-zinc-200" title={`${row.total.toFixed(1)} total points`}>
