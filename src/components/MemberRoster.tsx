@@ -564,7 +564,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
                     onClick={() => toggleSort('name')}
                     className="flex items-center gap-1 font-bold text-zinc-800 hover:text-zinc-950 cursor-pointer"
                   >
-                    <span>Student Name & School Email</span>
+                    <span>Student Name</span>
                     <ArrowUpDown className="w-3 h-3" />
                   </button>
                 </th>
@@ -666,7 +666,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
                             >
                               {m.name}
                             </button>
-                            <div className="text-[11px] text-zinc-400">{m.email}</div>
+                            {isOfficer && <div className="text-[11px] text-zinc-400">{m.email}</div>}
                           </div>
                         )}
                       </td>

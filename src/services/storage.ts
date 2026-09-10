@@ -11,7 +11,7 @@ let localOfficers: Officer[] = [];
 let localConfig: AppConfig = {
   pointCap: 50,
   hoursRate: 1,
-  officerCode: 'BETA2024',
+  officerCode: 'beta4216',
   clubName: 'High School Beta Club',
   academicYear: '2023-2024',
   schoolName: 'Anytown High School'
@@ -118,12 +118,13 @@ export class BetaStorage {
     localStorage.removeItem('betaclub_auth_session_v3');
   }
 
-  public static async loginStudent(email: string, password?: string): Promise<{ success: boolean; member?: Member; error?: string; token?: string }> {
+  public static async loginStudent(studentId: string): Promise<{ success: boolean; member?: Member; error?: string; token?: string }> {
     // Await docs directly from firestore to prevent race conditions on slow connections
     const snap = await getDocs(collection(db, 'members'));
     const members = snap.docs.map(d => d.data() as Member);
-    const member = members.find(m => m.email.toLowerCase() === email.toLowerCase());
-    if (!member) return { success: false, error: 'Student not found.' };
+    const normalizedId = studentId.trim().toLowerCase();
+    const member = members.find(m => (m.studentId || '').trim().toLowerCase() === normalizedId);
+    if (!member) return { success: false, error: 'Student ID not found.' };
     const session: AuthSession = { token: `tok-${Date.now()}`, email: member.email, isOfficer: false, memberId: member.id, name: member.name };
     this.saveSession(session);
     return { success: true, member, token: session.token };
@@ -138,7 +139,11 @@ export class BetaStorage {
     return { success: false, error: 'Invalid officer code' };
   }
 
-  public static async registerMember(firstName: string, lastName: string, email: string, password?: string, gradeLevel: number = 11): Promise<{ success: boolean; member?: Member; error?: string }> {
+  public static async registerMember(firstName: string, lastName: string, studentId: string, email: string, password?: string, gradeLevel: number = 11): Promise<{ success: boolean; member?: Member; error?: string }> {
+    const normalizedStudentId = studentId.trim().toUpperCase();
+    if (localMembers.some(m => (m.studentId || '').toLowerCase() === normalizedStudentId.toLowerCase())) {
+      return { success: false, error: 'Student ID already exists.' };
+    }
     if (localMembers.some(m => m.email.toLowerCase() === email.toLowerCase())) {
       return { success: false, error: 'Email already exists.' };
     }
@@ -146,7 +151,7 @@ export class BetaStorage {
     const newMember: Member = {
       id: `mem-${Date.now()}`,
       firstName, lastName, name: fullName, email: email.toLowerCase(),
-      totalPoints: 0, gradeLevel, studentId: `STU${1000 + localMembers.length}`,
+      totalPoints: 0, gradeLevel, studentId: normalizedStudentId,
       hasPassword: !!password, createdAt: new Date().toISOString()
     };
     await setDoc(doc(db, 'members', newMember.id), newMember);

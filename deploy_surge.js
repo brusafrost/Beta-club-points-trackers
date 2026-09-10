@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+import { spawn } from 'node:child_process';
 
 const buildDir = process.env.BUILD_DIR || './dist';
 const domain = process.env.SURGE_DOMAIN || 'betaclub-gcps-live.surge.sh';
@@ -11,7 +11,8 @@ if (!token) {
 
 const args = ['surge', buildDir, domain, '--token', token];
 const surge = spawn('npx', args, { stdio: 'inherit' });
-nsurge.on('close', (code) => {
+
+surge.on('close', (code) => {
   console.log(`Surge exited with code ${code}`);
   process.exit(code);
 });

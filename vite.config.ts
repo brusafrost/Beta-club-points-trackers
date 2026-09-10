@@ -9,14 +9,14 @@ export default defineConfig(() => {
     base: './',
     plugins: [react(), tailwindcss(), viteSingleFile()],
     esbuild: {
-      charset: 'ascii',
+      charset: 'ascii' as const,
     },
     build: {
       target: 'es2015',
       modulePreload: false,
       rollupOptions: {
         output: {
-          format: 'iife',
+          format: 'iife' as const,
           inlineDynamicImports: true
         }
       }

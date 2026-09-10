@@ -89,6 +89,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <PlusCircle className="w-4 h-4" /> Log Hours
             </button>
+            <button
+              onClick={() => onSelectSection('roster')}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeSection === 'roster' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              <Users className="w-4 h-4" /> Rankings
+            </button>
           </>
         )}
         <button

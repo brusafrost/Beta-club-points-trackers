@@ -14,6 +14,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   // Student form fields
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
+  const [studentId, setStudentId] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -35,7 +36,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     if (studentMode === 'register') {
-      if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim()) {
         setErrorMsg('Please fill in all required fields.');
         setIsLoading(false);
         return;
@@ -54,6 +55,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       const res = await BetaStorage.registerMember(
         firstName,
         lastName,
+        studentId,
         email,
         password || undefined,
         gradeLevel
@@ -69,13 +71,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       if (session) onLoginSuccess(session);
     } else {
       // Sign in mode
-      if (!email.trim()) {
-        setErrorMsg('Please enter your school email.');
+      if (!studentId.trim()) {
+        setErrorMsg('Please enter your student ID.');
         setIsLoading(false);
         return;
       }
 
-      const res = await BetaStorage.loginStudent(email, password || undefined);
+      const res = await BetaStorage.loginStudent(studentId);
       if (!res.success) {
         setErrorMsg(res.error || 'Login failed. Please check your credentials.');
         setIsLoading(false);
@@ -242,6 +244,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   </div>
 
                   <div className="space-y-1">
+                    <label className="font-semibold text-zinc-700">Student ID</label>
+                    <input
+                      type="text"
+                      required
+                      value={studentId}
+                      onChange={e => setStudentId(e.target.value)}
+                      placeholder="STU1001"
+                      className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
                     <label className="font-semibold text-zinc-700">Grade Level</label>
                     <select
                       value={gradeLevel}
@@ -258,13 +272,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               )}
 
               <div className="space-y-1">
-                <label className="font-semibold text-zinc-700">School Email Address</label>
+                <label className="font-semibold text-zinc-700">{studentMode === 'register' ? 'School Email Address' : 'Student ID'}</label>
                 <input
-                  type="email"
+                  type={studentMode === 'register' ? 'email' : 'text'}
                   required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="student@school.edu"
+                  value={studentMode === 'register' ? email : studentId}
+                  onChange={e => studentMode === 'register' ? setEmail(e.target.value) : setStudentId(e.target.value)}
+                  placeholder={studentMode === 'register' ? 'student@school.edu' : 'STU1001'}
                   className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
                 />
               </div>

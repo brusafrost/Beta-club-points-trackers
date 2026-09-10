@@ -11,7 +11,8 @@ if (!token) {
 
 const args = ['surge', buildDir, domain, '--token', token];
 const surge = spawn('npx', args, { stdio: 'inherit' });
-nsurge.on('close', (code) => {
+
+surge.on('close', (code) => {
   console.log(`Surge exited with code ${code}`);
   process.exit(code);
 });

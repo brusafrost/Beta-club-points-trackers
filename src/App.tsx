@@ -70,7 +70,7 @@ export default function App() {
 
   // Current logged in student profile
   const currentMember = session && !session.isOfficer
-    ? members.find(m => m.email.toLowerCase().trim() === session.email.toLowerCase().trim()) || BetaStorage.getMemberByEmail(session.email) || null
+    ? members.find(m => m.id === session.memberId) || (session.email ? members.find(m => m.email.toLowerCase().trim() === session.email.toLowerCase().trim()) : undefined) || null
     : null;
 
   const pendingCount = submissions.filter(s => s.status === 'Pending').length;
