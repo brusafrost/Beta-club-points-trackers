@@ -141,8 +141,8 @@ export class BetaStorage {
   }
 
   public static loginOfficer(code: string): { success: boolean; error?: string; token?: string } {
-    const enteredCode = code.trim().toLowerCase();
-    const configuredCode = String(localConfig.officerCode || '').trim().toLowerCase();
+    const enteredCode = String(code).replace(/\s+/g, '').toLowerCase();
+    const configuredCode = String(localConfig.officerCode || '').replace(/\s+/g, '').toLowerCase();
     if (enteredCode === configuredCode || enteredCode === DEFAULT_OFFICER_CODE) {
       const session: AuthSession = { token: `tok-${Date.now()}`, email: 'officer@school.edu', isOfficer: true, name: 'Officer' };
       this.saveSession(session);
