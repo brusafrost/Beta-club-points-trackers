@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+html {
+	background: #f4f4f5;
+}
+
+body {
+	margin: 0;
+	min-width: 320px;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+}

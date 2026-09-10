@@ -458,23 +458,39 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
     <div className="space-y-5 animate-in fade-in duration-200">
       
       {/* Top Banner & Tab Navigation */}
-      <div className="bg-white rounded-2xl p-5 border border-zinc-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-zinc-950 text-white rounded-2xl p-5 sm:p-6 border border-zinc-800 shadow-lg flex flex-col gap-5">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-md bg-zinc-900 text-white text-[11px] font-mono font-bold uppercase tracking-wider">
+            <span className="px-2.5 py-0.5 rounded-md bg-emerald-400 text-zinc-950 text-[11px] font-mono font-bold uppercase tracking-wider">
               Officer Portal
             </span>
-            <span className="text-xs text-zinc-500 font-mono">
+            <span className="text-xs text-zinc-400 font-mono">
               {config.schoolName} &bull; {members.length} Registered Members
             </span>
           </div>
-          <h1 className="text-xl font-bold text-zinc-900 tracking-tight mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-2">
             Service Hour Approvals & Chapter Management
           </h1>
+          <p className="text-xs text-zinc-400 font-mono mt-1">Review submissions, maintain the roster, and keep chapter records current.</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 max-w-lg">
+          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-zinc-400">Needs review</div>
+            <div className="text-lg font-bold text-amber-300 font-mono">{pendingSubs.length}</div>
+          </div>
+          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-zinc-400">Approved</div>
+            <div className="text-lg font-bold text-emerald-300 font-mono">{activeApprovedSubs.length}</div>
+          </div>
+          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-zinc-400">Events</div>
+            <div className="text-lg font-bold font-mono">{events.length}</div>
+          </div>
         </div>
 
         {/* 4 Main Tabs */}
-        <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs font-semibold overflow-x-auto shrink-0">
+        <div className="flex w-full bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs font-semibold overflow-x-auto shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('inbox')}

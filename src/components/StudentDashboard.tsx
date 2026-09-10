@@ -53,8 +53,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const officers = BetaStorage.getOfficers();
   const allMembers = BetaStorage.getMembers();
-  const sortedMembers = [...allMembers].sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0));
-  const myRank = sortedMembers.findIndex(m => m.email.toLowerCase().trim() === member.email.toLowerCase().trim()) + 1;
 
   const mySubs = useMemo(() => {
     return submissions.filter(
@@ -149,11 +147,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <span className="px-2.5 py-0.5 rounded-md bg-zinc-100 text-zinc-800 text-[11px] font-mono font-semibold uppercase tracking-wider border border-zinc-200">
               Grade {member.gradeLevel || '11'} &bull; {member.studentId || 'Member'}
             </span>
-            {allMembers.length > 0 && myRank > 0 && (
-              <span className="text-xs text-zinc-500 font-mono">
-                Class Rank #{myRank} of {allMembers.length}
-              </span>
-            )}
+            <span className="text-xs text-zinc-500 font-mono">Personal progress</span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">
@@ -223,12 +217,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       </div>
 
       {/* Main Student Sub-Tabs Navigation */}
-      <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
-        <div className="flex bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs font-semibold">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 pb-2">
+        <div className="flex max-w-full overflow-x-auto bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs font-semibold">
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+              className={`px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'bg-white text-zinc-900 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'
@@ -240,7 +234,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('submissions')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+              className={`px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'submissions'
                 ? 'bg-white text-zinc-900 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'
@@ -256,7 +250,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('students')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+              className={`px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'students'
                 ? 'bg-white text-zinc-900 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'
