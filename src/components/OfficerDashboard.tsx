@@ -37,6 +37,7 @@ import {
   Save
 } from 'lucide-react';
 import { AllStudentsMatrix } from './AllStudentsMatrix';
+import { MemberRoster } from './MemberRoster';
 
 interface OfficerDashboardProps {
   members: Member[];
@@ -61,7 +62,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 }) => {
   const { showToast } = useToast();
   // 4-tab layout: Inbox, Student History & Transcripts, Tools/Bonus, Settings
-  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students' | 'roster'>('inbox');
 
   // Filter within Inbox tab
   const [inboxFilter, setInboxFilter] = useState<'pending' | 'comments' | 'approved' | 'archived' | 'all'>('pending');
@@ -499,6 +500,17 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
 
           <button
             type="button"
+            onClick={() => setActiveTab('roster')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'roster' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Roster Management</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('tools')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'tools'
@@ -535,6 +547,16 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
 
           <AllStudentsMatrix members={members} submissions={submissions} events={events} isOfficer />
         </div>
+      )}
+
+      {activeTab === 'roster' && (
+        <MemberRoster
+          members={members}
+          config={config}
+          isOfficer
+          onRefresh={onRefresh}
+          onViewHistory={onViewMemberHistory}
+        />
       )}
 
       {/* TAB 1: REVIEW QUEUE & INBOX */}

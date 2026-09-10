@@ -163,10 +163,13 @@ export class BetaStorage {
   }
 
   // ---- MEMBERS ----
-  public static updateProfile(memberId: string, firstName: string, lastName: string, newEmail: string, gradeLevel?: number): { success: boolean; error?: string } {
+  public static updateProfile(memberId: string, firstName: string, lastName: string, newEmail: string, gradeLevel?: number, studentId?: string): { success: boolean; error?: string } {
     const member = localMembers.find(m => m.id === memberId);
     if (!member) return { success: false, error: 'Member not found.' };
-    const updated = { ...member, firstName, lastName, name: `${firstName} ${lastName}`.trim(), email: newEmail.toLowerCase(), gradeLevel: gradeLevel || member.gradeLevel };
+    if (studentId && !/^\d{9,10}$/.test(studentId.trim())) return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
+    const duplicate = studentId && localMembers.some(m => m.id !== memberId && m.studentId === studentId.trim());
+    if (duplicate) return { success: false, error: 'Student ID already belongs to another member.' };
+    const updated = { ...member, firstName, lastName, name: `${firstName} ${lastName}`.trim(), email: newEmail.toLowerCase(), gradeLevel: gradeLevel || member.gradeLevel, studentId: studentId?.trim() || member.studentId };
     setDoc(doc(db, 'members', member.id), updated);
     return { success: true };
   }
@@ -184,7 +187,13 @@ export class BetaStorage {
 
   public static removeMember(id: string): void {
     deleteDoc(doc(db, 'members', id));
-    // Optionally delete their submissions? Left as is for now.
+    const member = this.getMemberById(id);
+    if (!member) return;
+    const batch = writeBatch(db);
+    localSubmissions
+      .filter(sub => sub.studentId === member.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === member.email.toLowerCase()))
+      .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
+    batch.commit();
   }
 
   public static bulkImportMembers(rawText: string): { added: number; updated: number; merged: number } {

@@ -53,6 +53,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFirstName, setEditFirstName] = useState<string>('');
   const [editLastName, setEditLastName] = useState<string>('');
+  const [editStudentId, setEditStudentId] = useState<string>('');
   const [editEmail, setEditEmail] = useState<string>('');
   const [editGrade, setEditGrade] = useState<number>(11);
 
@@ -181,12 +182,17 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
     setEditingId(m.id);
     setEditFirstName(m.firstName || m.name.split(' ')[0] || '');
     setEditLastName(m.lastName || m.name.split(' ').slice(1).join(' ') || '');
+    setEditStudentId(m.studentId || '');
     setEditEmail(m.email);
     setEditGrade(m.gradeLevel || 11);
   };
 
   const saveEdit = (id: string) => {
-    const res = BetaStorage.updateProfile(id, editFirstName, editLastName, editEmail, editGrade);
+    if (!/^\d{9,10}$/.test(editStudentId.trim())) {
+      showToast({ title: 'Invalid Student ID', message: 'Student ID must contain 9 or 10 numbers.', type: 'error' });
+      return;
+    }
+    const res = BetaStorage.updateProfile(id, editFirstName, editLastName, editEmail, editGrade, editStudentId);
     setEditingId(null);
     if (res.success) {
       showToast({
@@ -634,6 +640,14 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
                       <td className="py-2.5 px-4">
                         {isEditing ? (
                           <div className="flex flex-col gap-1 font-sans">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={editStudentId}
+                              onChange={e => setEditStudentId(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                              placeholder="9–10 digit student ID"
+                              className="px-2 py-1 bg-white border border-zinc-300 rounded text-xs font-mono"
+                            />
                             <div className="flex gap-1">
                               <input
                                 type="text"
