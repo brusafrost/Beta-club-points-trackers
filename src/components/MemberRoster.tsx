@@ -212,6 +212,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
 
   const deleteMember = (id: string) => {
     const mem = members.find(m => m.id === id);
+    if (!window.confirm(`Remove ${mem?.name || 'this member'}? Their profile will be backed up online and their active submissions will be removed.`)) return;
     BetaStorage.removeMember(id);
     showToast({
       title: 'Member Removed',

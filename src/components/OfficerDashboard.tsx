@@ -101,6 +101,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [bonusPts, setBonusPts] = useState<string>('5.0');
   const [bonusReason, setBonusReason] = useState<string>('');
   const [bonusOverCap, setBonusOverCap] = useState<boolean>(false);
+  const [bulkPointsText, setBulkPointsText] = useState<string>('');
 
   // Settings
   const [editCap, setEditCap] = useState<string>(String(config.pointCap || 40));
@@ -346,6 +347,26 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
       setBonusReason('');
       onRefresh();
     }
+  };
+
+  const handleBulkPoints = () => {
+    const lines = bulkPointsText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    let added = 0;
+    let skipped = 0;
+    lines.forEach(line => {
+      const [studentId, pointsText, eventName, ...noteParts] = line.split(/\t|,/).map(value => value.trim());
+      const member = members.find(item => item.studentId === studentId);
+      const points = Number(pointsText);
+      if (!member || !Number.isFinite(points) || points <= 0 || !eventName) {
+        skipped++;
+        return;
+      }
+      BetaStorage.addOfficerPointsEntry(member.id, eventName, points, noteParts.join(', '));
+      added++;
+    });
+    setBulkPointsText('');
+    showToast({ title: 'Bulk Points Processed', message: `${added} entries saved${skipped ? `, ${skipped} skipped because of an invalid ID, event, or points value` : '.'}`, type: skipped ? 'warning' : 'success' });
+    onRefresh();
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -1179,6 +1200,27 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
       {/* TAB 3: BONUS POINTS & CHAPTER EVENTS */}
       {activeTab === 'tools' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+          <div className="lg:col-span-12 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900">Bulk Point Entry</h2>
+              <p className="text-xs text-zinc-500 font-mono">Paste one entry per line: student ID, points, event, optional note.</p>
+            </div>
+            <textarea
+              value={bulkPointsText}
+              onChange={e => setBulkPointsText(e.target.value)}
+              placeholder={'123456789\t2.5\tCommunity Cleanup\tVerified attendance'}
+              rows={4}
+              className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+            />
+            <button
+              type="button"
+              onClick={handleBulkPoints}
+              disabled={!bulkPointsText.trim()}
+              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-xl text-xs font-semibold"
+            >Save Point Entries
+            </button>
+          </div>
           
           {/* Award Discretionary Bonus Points (6 Cols) */}
           <div className="lg:col-span-6 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">

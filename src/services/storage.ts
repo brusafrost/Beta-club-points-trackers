@@ -356,6 +356,29 @@ export class BetaStorage {
     return { success: true, actualPoints: actual };
   }
 
+  public static addOfficerPointsEntry(memberId: string, category: string, points: number, notes: string): { success: boolean; error?: string } {
+    const member = this.getMemberById(memberId);
+    if (!member || points <= 0 || !category.trim()) return { success: false, error: 'Student, event, and positive points are required.' };
+    const submission: Submission = {
+      id: `officer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      studentName: member.name,
+      studentId: member.studentId,
+      studentEmail: member.email,
+      category: category.trim(),
+      hours: 0,
+      points: Math.round(points * 10) / 10,
+      date: new Date().toISOString().split('T')[0],
+      assignedTo: 'Officer',
+      proofUrl: '',
+      status: 'Approved',
+      timestamp: new Date().toISOString(),
+      officerNotes: notes.trim() || 'Entered by officer'
+    };
+    setDoc(doc(db, 'submissions', submission.id), submission);
+    setTimeout(() => this.recalculateMemberPoints(member.email), 500);
+    return { success: true };
+  }
+
   public static recalculateMemberPoints(email: string): number {
     const norm = email.toLowerCase().trim();
     const member = localMembers.find(m => m.email.toLowerCase() === norm);

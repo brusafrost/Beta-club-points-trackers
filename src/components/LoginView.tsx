@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AuthSession } from '../types';
 import { BetaStorage } from '../services/storage';
 import { User, ShieldCheck, LogIn, UserPlus, ArrowRight, Eye, EyeOff, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -28,8 +28,51 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const isValidStudentId = (value: string) => /^\d{9,10}$/.test(value.trim());
+
+  useEffect(() => {
+    if (!isScanning || !navigator.mediaDevices?.getUserMedia || !videoRef.current) return;
+    let stream: MediaStream | null = null;
+    let cancelled = false;
+    const scan = async () => {
+      const BarcodeDetector = (window as Window & { BarcodeDetector?: new (options?: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector;
+      if (!BarcodeDetector) {
+        setErrorMsg('QR scanning is not supported in this browser. Enter the student ID manually.');
+        setIsScanning(false);
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (!videoRef.current || cancelled) return;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        while (!cancelled && isScanning) {
+          const codes = await detector.detect(videoRef.current);
+          const match = codes[0]?.rawValue.match(/\d{9,10}/)?.[0];
+          if (match) {
+            setStudentId(match);
+            setIsScanning(false);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+      } catch {
+        setErrorMsg('Camera access was unavailable. Enter the student ID manually.');
+        setIsScanning(false);
+      } finally {
+        stream?.getTracks().forEach(track => track.stop());
+      }
+    };
+    scan();
+    return () => {
+      cancelled = true;
+      stream?.getTracks().forEach(track => track.stop());
+    };
+  }, [isScanning]);
 
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,14 +328,27 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
               <div className="space-y-1">
                 <label className="font-semibold text-zinc-700">{studentMode === 'register' ? 'Email Address (Optional)' : 'Student ID (9–10 numbers)'}</label>
-                <input
+                <div className="flex gap-2">
+                  <input
                   type={studentMode === 'register' ? 'email' : 'text'}
                   required={studentMode === 'signin'}
                   value={studentMode === 'register' ? email : studentId}
                   onChange={e => studentMode === 'register' ? setEmail(e.target.value) : setStudentId(e.target.value)}
                   placeholder={studentMode === 'register' ? 'student@school.edu' : '123456789'}
-                  className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
-                />
+                  className="min-w-0 flex-1 p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
+                  />
+                  {studentMode === 'signin' && (
+                    <button type="button" onClick={() => { setErrorMsg(''); setIsScanning(true); }} className="px-3 py-2 bg-zinc-100 border border-zinc-200 rounded-xl text-xs font-semibold whitespace-nowrap">
+                      Scan ID
+                    </button>
+                  )}
+                </div>
+                {isScanning && (
+                  <div className="mt-2 space-y-2">
+                    <video ref={videoRef} muted playsInline className="w-full max-h-48 rounded-xl bg-zinc-900 object-cover" />
+                    <button type="button" onClick={() => setIsScanning(false)} className="text-xs text-zinc-600 underline">Stop camera</button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
