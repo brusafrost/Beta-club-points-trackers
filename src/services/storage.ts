@@ -224,6 +224,18 @@ export class BetaStorage {
     return { success: true };
   }
 
+  public static permanentlyDeleteArchivedMember(archiveId: string): { success: boolean; error?: string } {
+    const archive = localDeletedMembers.find(member => `${member.id}-${member.deletedAt}` === archiveId);
+    if (!archive) return { success: false, error: 'Archived member not found.' };
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'deletedMembers', archiveId));
+    localSubmissions
+      .filter(sub => sub.studentId === archive.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === archive.email.toLowerCase()))
+      .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
+    batch.commit();
+    return { success: true };
+  }
+
   public static bulkImportMembers(rawText: string): { added: number; updated: number; merged: number } {
     // Basic bulk import directly to firestore
     const lines = rawText.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);

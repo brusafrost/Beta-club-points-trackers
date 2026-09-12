@@ -618,7 +618,7 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
           ) : (
             <div className="space-y-2">
               {BetaStorage.getDeletedMembers().map(archive => (
-                <div key={`${archive.id}-${archive.deletedAt}`} className="flex items-center justify-between gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-200">
+                <div key={`${archive.id}-${archive.deletedAt}`} className="flex flex-wrap items-center justify-between gap-3 p-3 bg-zinc-50 rounded-xl border border-zinc-200">
                   <div className="min-w-0">
                     <div className="font-semibold text-sm text-zinc-900 truncate">{archive.name}</div>
                     <div className="text-[11px] text-zinc-500 font-mono">ID: {archive.studentId || 'No ID'} | Deleted {formatFriendlyTimestamp(archive.deletedAt)}</div>
@@ -632,6 +632,17 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
                     }}
                     className="px-3 py-1.5 bg-zinc-900 text-white rounded-lg text-xs font-semibold shrink-0"
                   >Restore
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!window.confirm(`Permanently delete ${archive.name}? This removes the backup and any remaining submissions or comments. This cannot be undone.`)) return;
+                      const result = BetaStorage.permanentlyDeleteArchivedMember(`${archive.id}-${archive.deletedAt}`);
+                      showToast({ title: result.success ? 'Member Permanently Deleted' : 'Delete Failed', message: result.success ? `${archive.name}'s backup and records were removed.` : result.error || 'Could not permanently delete member.', type: result.success ? 'success' : 'error' });
+                      onRefresh();
+                    }}
+                    className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-semibold shrink-0"
+                  >Permanently Delete
                   </button>
                 </div>
               ))}
