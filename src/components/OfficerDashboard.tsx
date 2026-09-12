@@ -106,7 +106,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   // Settings
   const [editCap, setEditCap] = useState<string>(String(config.pointCap || 40));
   const [editRate, setEditRate] = useState<string>(String(config.hoursRate || 1.0));
-  const [editCode, setEditCode] = useState<string>(config.officerCode || '12345678');
+  const [editCode, setEditCode] = useState<string>(config.officerCode || 'beta4216');
   const [editClubName, setEditClubName] = useState<string>(config.clubName || 'National Beta Club');
   const [editSchoolName, setEditSchoolName] = useState<string>(config.schoolName || 'Westview High School');
 
@@ -374,7 +374,7 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
     BetaStorage.updateConfig({
       pointCap: Number(editCap) || 40,
       hoursRate: Number(editRate) || 1.0,
-      officerCode: editCode.trim() || '12345678',
+      officerCode: editCode.trim() || 'beta4216',
       clubName: editClubName.trim() || 'National Beta Club',
       schoolName: editSchoolName.trim() || 'Westview High School'
     });

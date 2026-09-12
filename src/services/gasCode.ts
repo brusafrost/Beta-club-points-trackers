@@ -3,7 +3,7 @@ export const GAS_CODE_GS = `/**
  * Hardened for 500+ student chapters with LockService mutex concurrency & Drive slip storage.
  */
 
-const OFFICER_PASSWORD = '12345678'; // Customize your officer passcode
+const OFFICER_PASSWORD = 'beta4216'; // Customize your officer passcode
 
 const SHEET_NAMES = {
   MEMBERS: 'Members',
