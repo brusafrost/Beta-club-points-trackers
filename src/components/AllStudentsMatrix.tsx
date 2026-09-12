@@ -7,16 +7,23 @@ interface Props {
   submissions: Submission[];
   events: EventItem[];
   isOfficer?: boolean;
+  viewerMemberId?: string;
 }
 
-export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, isOfficer = false }) => {
+export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, isOfficer = false, viewerMemberId }) => {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
   // Build map: studentEmail -> { eventName -> points }
   const { displayEvents, rows } = useMemo(() => {
-    const approved = submissions.filter(s => s.status === 'Approved');
+    const approved = submissions.filter(s => {
+      if (s.status !== 'Approved') return false;
+      const isBonus = s.category.toLowerCase().startsWith('bonus:');
+      if (!isBonus || isOfficer) return true;
+      const submissionKey = s.studentId || s.studentEmail.toLowerCase().trim();
+      return submissionKey === viewerMemberId;
+    });
     const studentsMap: Record<string, Record<string, number>> = {};
 
     approved.forEach(s => {
@@ -38,7 +45,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
     });
 
     return { displayEvents: allEvents, rows };
-  }, [members, submissions, events]);
+  }, [members, submissions, events, isOfficer, viewerMemberId]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;

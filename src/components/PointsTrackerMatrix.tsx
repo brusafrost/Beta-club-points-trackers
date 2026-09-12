@@ -9,6 +9,7 @@ interface PointsTrackerMatrixProps {
   events: EventItem[];
   config: AppConfig;
   isOfficer?: boolean;
+  viewerMemberId?: string;
 }
 
 export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
@@ -16,7 +17,8 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   submissions,
   events,
   config,
-  isOfficer = false
+  isOfficer = false,
+  viewerMemberId
 }) => {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -31,7 +33,13 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
 
   // Build matrix data of student email -> event -> approved points
   const { displayEvents, filteredRows } = useMemo(() => {
-    const approvedSubs = submissions.filter(s => s.status === 'Approved');
+    const approvedSubs = submissions.filter(s => {
+      if (s.status !== 'Approved') return false;
+      const isBonus = s.category.toLowerCase().startsWith('bonus:');
+      if (!isBonus || isOfficer) return true;
+      const submissionKey = s.studentId || s.studentEmail.toLowerCase().trim();
+      return submissionKey === viewerMemberId;
+    });
     const map: Record<string, Record<string, number>> = {};
 
     approvedSubs.forEach(s => {
@@ -86,7 +94,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
     });
 
     return { displayEvents: activeEvents, filteredRows: rows };
-  }, [members, submissions, events, searchQuery, eventFilter, gradeFilter, sortField, sortOrder]);
+  }, [members, submissions, events, searchQuery, eventFilter, gradeFilter, sortField, sortOrder, isOfficer, viewerMemberId]);
 
   const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
   const paginatedRows = useMemo(() => {

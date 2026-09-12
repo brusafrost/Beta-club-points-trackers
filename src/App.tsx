@@ -149,6 +149,7 @@ export default function App() {
               events={events}
               config={config}
               isOfficer={session.isOfficer}
+              viewerMemberId={currentMember?.studentId || currentMember?.email.toLowerCase().trim()}
             />
           )}
 

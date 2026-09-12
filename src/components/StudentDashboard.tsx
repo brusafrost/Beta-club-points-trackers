@@ -449,7 +449,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
           </div>
 
-          <AllStudentsMatrix members={allMembers} submissions={submissions} events={events} />
+          <AllStudentsMatrix members={allMembers} submissions={submissions} events={events} viewerMemberId={member.studentId || member.email.toLowerCase().trim()} />
         </div>
       )}
 
