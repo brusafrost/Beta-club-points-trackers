@@ -17,7 +17,7 @@ const DEFAULT_CONFIG = {
   pointCap: 40,
   hoursRate: 1.0,
   clubName: 'National Beta Club',
-  academicYear: '2025-2026',
+  academicYear: '2026-2027',
   schoolName: 'Westview High School'
 };
 

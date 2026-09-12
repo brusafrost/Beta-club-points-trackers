@@ -14,7 +14,7 @@ let localConfig: AppConfig = {
   hoursRate: 1,
   officerCode: 'beta4216',
   clubName: 'High School Beta Club',
-  academicYear: '2023-2024',
+  academicYear: '2026-2027',
   schoolName: 'Anytown High School'
 };
 const DEFAULT_OFFICER_CODE = 'beta4216';
@@ -39,6 +39,10 @@ export class BetaStorage {
     onSnapshot(doc(db, 'config', 'main'), (snap) => {
       if (snap.exists()) {
         localConfig = snap.data() as AppConfig;
+        if (localConfig.academicYear === '2023-2024') {
+          localConfig = { ...localConfig, academicYear: '2026-2027' };
+          setDoc(doc(db, 'config', 'main'), { academicYear: '2026-2027' }, { merge: true });
+        }
       } else {
         // Seed config
         setDoc(doc(db, 'config', 'main'), localConfig);
