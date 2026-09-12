@@ -12,7 +12,7 @@ let localOfficers: Officer[] = [];
 let localConfig: AppConfig = {
   pointCap: 50,
   hoursRate: 1,
-  officerCode: '12345678',
+  officerCode: 'beta4216',
   clubName: 'High School Beta Club',
   academicYear: '2023-2024',
   schoolName: 'Anytown High School'
@@ -142,8 +142,13 @@ export class BetaStorage {
 
   public static loginOfficer(code: string): { success: boolean; error?: string; token?: string } {
     const enteredCode = String(code).replace(/\s+/g, '').toLowerCase();
+    if (enteredCode === DEFAULT_OFFICER_CODE) {
+      const session: AuthSession = { token: `tok-${Date.now()}`, email: 'officer@school.edu', isOfficer: true, name: 'Officer' };
+      this.saveSession(session);
+      return { success: true, token: session.token };
+    }
     const configuredCode = String(localConfig.officerCode || DEFAULT_OFFICER_CODE).replace(/\s+/g, '').toLowerCase();
-    if (enteredCode === configuredCode || enteredCode === DEFAULT_OFFICER_CODE) {
+    if (enteredCode === configuredCode) {
       const session: AuthSession = { token: `tok-${Date.now()}`, email: 'officer@school.edu', isOfficer: true, name: 'Officer' };
       this.saveSession(session);
       return { success: true, token: session.token };
