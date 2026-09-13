@@ -16,6 +16,14 @@ export interface DeletedMember extends Member {
   deletedAt: string;
 }
 
+export interface AuditLog {
+  id: string;
+  action: string;
+  target: string;
+  details: string;
+  timestamp: string;
+}
+
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface Submission {

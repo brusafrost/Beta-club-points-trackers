@@ -1,11 +1,12 @@
 
-import { Member, DeletedMember, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus } from '../types';
+import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus } from '../types';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Local cache
 let localMembers: Member[] = [];
 let localDeletedMembers: DeletedMember[] = [];
+let localAuditLogs: AuditLog[] = [];
 let localSubmissions: Submission[] = [];
 let localEvents: EventItem[] = [];
 let localOfficers: Officer[] = [];
@@ -62,6 +63,12 @@ export class BetaStorage {
       triggerChange();
     });
 
+    onSnapshot(collection(db, 'auditLogs'), (snap) => {
+      localAuditLogs = snap.docs.map(d => d.data() as AuditLog);
+      localAuditLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      triggerChange();
+    });
+
     // Listen to submissions
     onSnapshot(collection(db, 'submissions'), (snap) => {
       localSubmissions = snap.docs.map(d => d.data() as Submission);
@@ -86,6 +93,11 @@ export class BetaStorage {
   public static getConfig(): AppConfig { return localConfig; }
   public static getMembers(): Member[] { return [...localMembers]; }
   public static getDeletedMembers(): DeletedMember[] { return [...localDeletedMembers]; }
+  public static getAuditLogs(): AuditLog[] { return [...localAuditLogs]; }
+  private static log(action: string, target: string, details: string): void {
+    const entry: AuditLog = { id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, action, target, details, timestamp: new Date().toISOString() };
+    setDoc(doc(db, 'auditLogs', entry.id), entry);
+  }
   public static getMemberById(id: string): Member | undefined { return localMembers.find(m => m.id === id); }
   public static getMemberByEmail(email: string): Member | undefined { return localMembers.find(m => m.email.toLowerCase() === email.toLowerCase()); }
   public static getSubmissions(): Submission[] { return [...localSubmissions]; }
@@ -216,6 +228,7 @@ export class BetaStorage {
       .filter(sub => sub.studentId === member.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === member.email.toLowerCase()))
       .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
     batch.commit();
+    this.log('Member removed', member.name, 'Profile archived and active submissions removed.');
   }
 
   public static restoreMember(archiveId: string): { success: boolean; error?: string } {
@@ -237,6 +250,7 @@ export class BetaStorage {
       .filter(sub => sub.studentId === archive.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === archive.email.toLowerCase()))
       .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
     batch.commit();
+    this.log('Member permanently deleted', archive.name, 'Archived profile and remaining submissions removed.');
     return { success: true };
   }
 
@@ -346,6 +360,7 @@ export class BetaStorage {
     const updatedSub = { ...sub, points: actual, status: 'Approved' as SubmissionStatus };
     if (notes) updatedSub.officerNotes = notes;
     setDoc(doc(db, 'submissions', subId), updatedSub);
+    this.log('Submission approved', sub.studentName, `${sub.category}: ${actual.toFixed(1)} points${notes ? `; ${notes}` : ''}`);
     
     // Recalculate member points asynchronously (after a short delay to let sub save)
     setTimeout(() => this.recalculateMemberPoints(sub.studentEmail), 500);
@@ -360,6 +375,7 @@ export class BetaStorage {
     const updated = { ...sub, status: 'Rejected' as SubmissionStatus };
     if (notes) updated.officerNotes = notes;
     setDoc(doc(db, 'submissions', subId), updated);
+    this.log('Submission rejected', sub.studentName, `${sub.category}${notes ? `; ${notes}` : ''}`);
     setTimeout(() => this.recalculateMemberPoints(sub.studentEmail), 500);
     return { success: true };
   }
@@ -376,6 +392,7 @@ export class BetaStorage {
       proofUrl: '', status: 'Approved', timestamp: new Date().toISOString(), officerNotes: `Awarded by officer: ${reason}`
     };
     setDoc(doc(db, 'submissions', newSub.id), newSub);
+    this.log('Bonus awarded', member.name, `${actual.toFixed(1)} points: ${reason}`);
     setTimeout(() => this.recalculateMemberPoints(member.email), 500);
     return { success: true, actualPoints: actual };
   }
@@ -430,6 +447,17 @@ export class BetaStorage {
       const emails = new Set(pending.map(s => s.studentEmail));
       emails.forEach(e => this.recalculateMemberPoints(e));
     });
+    this.log('Bulk approval', `${pending.length} submissions`, 'All pending submissions approved.');
+    return { success: true, count: pending.length };
+  }
+
+  public static batchRejectAllPending(notes: string): { success: boolean; count: number } {
+    const pending = localSubmissions.filter(s => s.status === 'Pending');
+    if (pending.length === 0) return { success: true, count: 0 };
+    const batch = writeBatch(db);
+    pending.forEach(sub => batch.update(doc(db, 'submissions', sub.id), { status: 'Rejected', officerNotes: notes.trim() }));
+    batch.commit();
+    this.log('Bulk rejection', `${pending.length} submissions`, notes.trim() || 'All pending submissions rejected.');
     return { success: true, count: pending.length };
   }
 

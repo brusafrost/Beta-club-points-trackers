@@ -62,7 +62,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 }) => {
   const { showToast } = useToast();
   // 4-tab layout: Inbox, Student History & Transcripts, Tools/Bonus, Settings
-  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students' | 'roster' | 'deleted'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'history' | 'tools' | 'settings' | 'students' | 'roster' | 'deleted' | 'audit'>('inbox');
 
   // Filter within Inbox tab
   const [inboxFilter, setInboxFilter] = useState<'pending' | 'comments' | 'approved' | 'archived' | 'all'>('pending');
@@ -259,6 +259,18 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
       });
       onRefresh();
     }
+  };
+
+  const handleRejectAllPending = () => {
+    if (pendingSubs.length === 0) {
+      showToast({ title: 'Notice', message: 'No pending submissions in queue.', type: 'info' });
+      return;
+    }
+    const note = window.prompt('Enter the feedback that should be sent with these rejections:');
+    if (note === null) return;
+    const res = BetaStorage.batchRejectAllPending(note);
+    showToast({ title: 'Bulk Rejection Complete', message: `Rejected ${res.count} pending submissions with feedback.`, type: 'success' });
+    onRefresh();
   };
 
   const handleClearApprovedQueue = () => {
@@ -557,6 +569,11 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
             <span>Deleted Members ({BetaStorage.getDeletedMembers().length})</span>
           </button>
 
+          <button type="button" onClick={() => setActiveTab('audit')} className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'audit' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-600 hover:text-zinc-900'}`}>
+            <History className="w-3.5 h-3.5" />
+            <span>Audit Log ({BetaStorage.getAuditLogs().length})</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('tools')}
@@ -651,6 +668,27 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
         </div>
       )}
 
+      {activeTab === 'audit' && (
+        <div className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900">Officer Audit Log</h2>
+            <p className="text-xs text-zinc-500 font-mono">Shared online history of roster, points, and review changes.</p>
+          </div>
+          <div className="space-y-2 max-h-[560px] overflow-y-auto">
+            {BetaStorage.getAuditLogs().length === 0 ? <p className="p-8 text-center text-xs text-zinc-500 font-mono border border-dashed border-zinc-200 rounded-xl">No officer actions recorded yet.</p> : BetaStorage.getAuditLogs().map(log => (
+              <div key={log.id} className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-sm text-zinc-900">{log.action}</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">{formatFriendlyTimestamp(log.timestamp)}</span>
+                </div>
+                <div className="text-xs text-zinc-700 mt-1">{log.target}</div>
+                <div className="text-[11px] text-zinc-500 font-mono mt-1">{log.details}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: REVIEW QUEUE & INBOX */}
       {activeTab === 'inbox' && (
         <div className="space-y-4">
@@ -739,15 +777,15 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
               </div>
 
               {inboxFilter === 'pending' && (
-                <button
-                  type="button"
-                  onClick={handleApproveAllPending}
-                  disabled={pendingSubs.length === 0}
-                  className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 shadow-xs transition-colors"
-                >
-                  <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Batch Approve All ({pendingSubs.length})</span>
-                </button>
+                <>
+                  <button type="button" onClick={handleApproveAllPending} disabled={pendingSubs.length === 0} className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 shadow-xs transition-colors">
+                    <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Approve All ({pendingSubs.length})</span>
+                  </button>
+                  <button type="button" onClick={handleRejectAllPending} disabled={pendingSubs.length === 0} className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-800 border border-red-200 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors">
+                    Reject All
+                  </button>
+                </>
               )}
 
               {inboxFilter === 'approved' && (

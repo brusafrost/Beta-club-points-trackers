@@ -100,6 +100,19 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const categoryList = Object.entries(categoryMap).sort((a, b) => b[1].points - a[1].points);
   const events = BetaStorage.getEvents();
+  const calendarDays = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const dayMap: Record<number, Submission[]> = {};
+    mySubs.forEach(sub => {
+      const date = new Date(`${sub.date}T00:00:00`);
+      if (date.getFullYear() === year && date.getMonth() === month) (dayMap[date.getDate()] ||= []).push(sub);
+    });
+    return { label: now.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }), firstDay, totalDays, dayMap };
+  }, [mySubs]);
 
   // Export personal transcript CSV
   const handleExportTranscript = () => {
@@ -372,6 +385,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="lg:col-span-5 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div><h2 className="text-base font-bold text-zinc-900">Service Calendar</h2><p className="text-xs text-zinc-500 font-mono">{calendarDays.label}</p></div>
+              <Calendar className="w-5 h-5 text-teal-700" />
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-mono text-zinc-400">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
+              {Array.from({ length: calendarDays.firstDay }).map((_, index) => <span key={`blank-${index}`} />)}
+              {Array.from({ length: calendarDays.totalDays }).map((_, index) => {
+                const day = index + 1;
+                const entries = calendarDays.dayMap[day] || [];
+                return <div key={day} className={`min-h-9 rounded-lg border p-1 ${entries.length ? 'border-teal-200 bg-teal-50' : 'border-zinc-100 bg-zinc-50'}`}><div className="font-semibold text-zinc-700">{day}</div>{entries.length > 0 && <div className="text-[9px] text-teal-800 font-bold">{entries.reduce((sum, entry) => sum + (entry.points || 0), 0).toFixed(1)}p</div>}</div>;
+              })}
+            </div>
           </div>
 
           {/* Right Column: Personal Category Breakdown & Chapter Events (5 Cols) */}
