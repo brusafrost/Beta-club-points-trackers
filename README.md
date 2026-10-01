@@ -19,8 +19,21 @@ A modern, full-featured web portal for High School National Beta Club chapters. 
   - Point override and discretionary bonus point adjustment tools.
   - Complete chapter roster management with multi-field search and status filters (Cap Met, In Progress, Near Cap, Zero Hours).
   - Bulk roster import (CSV, tab-delimited sheets, or name lists).
+  - Bulk meeting point awards by student ID, with a reviewable recipient list and no attendance or event records.
   - Audit-ready matrix cross-tabulation and CSV chapter exports.
   - Custom category configuration, hour multipliers, and chapter point cap customization.
+
+---
+
+## Bulk Meeting Point Awards
+
+1. Sign in as an officer and open **Tools**.
+2. Enter a unique label for the meeting. Include the date if meeting names may repeat.
+3. Paste the student ID column from the Google Form responses. IDs can be separated by lines, tabs, commas, semicolons, or spaces; a `Student ID` or `Student Number` header is ignored.
+4. Review matched students and the counts for IDs not found, ambiguous matches, invalid values, and duplicates. Matched students are selected by default; uncheck anyone who should not receive a point.
+5. Choose **Award 1 Point to Selected** and confirm the recipient count.
+
+The award updates only selected students' point totals and manual point adjustments. It does not create submissions, attendance records, events, or student history entries. The officer audit log records the meeting label and award count, not student names. Each meeting label can be used only once to prevent duplicate awards.
 
 ---
 

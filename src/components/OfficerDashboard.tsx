@@ -140,9 +140,15 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     let invalid = 0;
     let duplicates = 0;
 
-    meetingPointText.split(/[\s,;]+/).forEach(value => {
-      const studentId = value.trim().replace(/^['"]|['"]$/g, '');
-      if (!studentId || /^(student\s*id|student\s*number|id)$/i.test(studentId)) return;
+    const values = meetingPointText.split(/[\r\n\t,;]+/).flatMap(cell => {
+      const value = cell.trim().replace(/^['"]|['"]$/g, '');
+      if (!value || /^(student\s*id|student\s*number|id)$/i.test(value)) return [];
+      return value.split(/\s+/);
+    });
+
+    values.forEach(value => {
+      const studentId = value.trim();
+      if (!studentId) return;
       if (!/^\d{9,10}$/.test(studentId)) {
         invalid++;
         return;
@@ -1354,7 +1360,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   id="meeting-point-label"
                   type="text"
                   value={meetingPointLabel}
-                  onChange={e => setMeetingPointLabel(e.target.value)}
+                  onChange={e => {
+                    setMeetingPointLabel(e.target.value);
+                    setExcludedMeetingPointMemberIds(new Set());
+                  }}
                   placeholder="e.g. October Club Meeting"
                   className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                 />
@@ -1364,7 +1373,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 <textarea
                   id="meeting-student-ids"
                   value={meetingPointText}
-                  onChange={e => setMeetingPointText(e.target.value)}
+                  onChange={e => {
+                    setMeetingPointText(e.target.value);
+                    setExcludedMeetingPointMemberIds(new Set());
+                  }}
                   placeholder="Paste student IDs from the form responses"
                   rows={3}
                   className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500"
