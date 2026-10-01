@@ -148,7 +148,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const selectedStudentSubs = useMemo(() => {
     if (!selectedStudent) return [];
     let list = submissions.filter(
-      s => s.studentEmail.toLowerCase().trim() === selectedStudent.email.toLowerCase().trim()
+      s => s.studentId ? s.studentId === selectedStudent.studentId : s.studentEmail.toLowerCase().trim() === selectedStudent.email.toLowerCase().trim()
     );
     if (historyStatusFilter !== 'ALL') {
       list = list.filter(s => s.status === historyStatusFilter);
@@ -213,25 +213,31 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
   };
 
-  const handleEditMemberSave = (e: React.FormEvent) => {
+  const handleEditMemberSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMember) return;
-    const members = BetaStorage.getMembers();
-    const mem = members.find(m => m.id === editingMember.id);
-    if (mem) {
-      mem.firstName = editMemFirstName.trim();
-      mem.lastName = editMemLastName.trim();
-      mem.name = `${mem.firstName} ${mem.lastName}`.trim();
-      mem.email = editMemEmail.toLowerCase().trim();
-      mem.gradeLevel = editMemGrade;
-      const pts = parseFloat(editMemPoints);
-      if (!isNaN(pts)) mem.totalPoints = Math.round(pts * 10) / 10;
-      BetaStorage.updateProfile(mem.id, mem.firstName, mem.lastName, mem.email, mem.gradeLevel);
-if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'totalPoints', mem.totalPoints);
-      showToast({ title: 'Member Updated', message: `Profile updated for ${mem.name}`, type: 'success' });
-      setEditingMember(null);
-      onRefresh();
+    const firstName = editMemFirstName.trim();
+    const lastName = editMemLastName.trim();
+    const email = editMemEmail.toLowerCase().trim();
+    const points = Number(editMemPoints);
+    if (!firstName || !lastName || !Number.isFinite(points) || points < 0) {
+      showToast({ title: 'Invalid Member Details', message: 'Enter a name and a valid non-negative point total.', type: 'error' });
+      return;
     }
+
+    const pointsResult = await BetaStorage.setMemberTotalPoints(editingMember.id, points);
+    if (!pointsResult.success) {
+      showToast({ title: 'Points Not Saved', message: pointsResult.error || 'Unable to save point total.', type: 'error' });
+      return;
+    }
+    const profileResult = BetaStorage.updateProfile(editingMember.id, firstName, lastName, email, editMemGrade);
+    if (!profileResult.success) {
+      showToast({ title: 'Profile Not Saved', message: profileResult.error || 'Unable to save profile.', type: 'error' });
+      return;
+    }
+    showToast({ title: 'Member Updated', message: `Profile and points updated for ${firstName} ${lastName}.`, type: 'success' });
+    setEditingMember(null);
+    onRefresh();
   };
 
   const handleRemoveSubmission = (sub: Submission) => {
@@ -400,7 +406,7 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
 
   const handleDownloadStudentTranscript = (student: Member) => {
     const studentSubs = submissions.filter(
-      s => s.studentEmail.toLowerCase().trim() === student.email.toLowerCase().trim()
+      s => s.studentId ? s.studentId === student.studentId : s.studentEmail.toLowerCase().trim() === student.email.toLowerCase().trim()
     );
     const headers = ['Submission ID', 'Activity Category', 'Service Date', 'Hours Logged', 'Credit Points Earned', 'Status', 'Reviewer', 'Student Comment', 'Officer Notes'];
     const rows = studentSubs.map(s => [
@@ -827,7 +833,9 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
           ) : (
             <div className="space-y-3">
               {filteredInbox.map((sub) => {
-                const member = members.find(m => m.email.toLowerCase().trim() === sub.studentEmail.toLowerCase().trim());
+                const member = sub.studentId
+                  ? members.find(m => m.studentId === sub.studentId)
+                  : members.find(m => m.email.toLowerCase().trim() === sub.studentEmail.toLowerCase().trim());
                 const currentPts = member ? member.totalPoints : 0;
                 const pointsAfterApprove = Math.min(cap, currentPts + (sub.points || 0));
 
@@ -1049,7 +1057,7 @@ if (mem.totalPoints !== undefined) BetaStorage.updateMemberInline(mem.id, 'total
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
               {filteredStudentsList.map((m) => {
                 const isSelected = selectedStudent?.email.toLowerCase().trim() === m.email.toLowerCase().trim();
-                const memSubs = submissions.filter(s => s.studentEmail.toLowerCase().trim() === m.email.toLowerCase().trim());
+                const memSubs = submissions.filter(s => s.studentId ? s.studentId === m.studentId : s.studentEmail.toLowerCase().trim() === m.email.toLowerCase().trim());
                 const pendingCount = memSubs.filter(s => s.status === 'Pending').length;
 
                 return (

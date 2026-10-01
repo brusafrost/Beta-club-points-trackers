@@ -58,13 +58,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     return submissions.filter(
       s => s.studentId ? s.studentId === member.studentId : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()
     );
-  }, [submissions, member.email]);
+  }, [submissions, member.email, member.studentId]);
 
   const approvedSubs = useMemo(() => mySubs.filter(s => s.status === 'Approved'), [mySubs]);
   const pendingSubs = useMemo(() => mySubs.filter(s => s.status === 'Pending'), [mySubs]);
   const rejectedSubs = useMemo(() => mySubs.filter(s => s.status === 'Rejected'), [mySubs]);
 
-  const approvedPoints = approvedSubs.reduce((sum, s) => sum + (s.points || 0), 0);
+  const approvedEventAndBonusPoints = approvedSubs.reduce((sum, s) => sum + (s.points || 0), 0);
+  const approvedPoints = Math.max(0, approvedEventAndBonusPoints + (Number(member.manualPointAdjustment) || 0));
+  const bonusPoints = approvedSubs
+    .filter(s => s.category.toLowerCase().startsWith('bonus:'))
+    .reduce((sum, s) => sum + (s.points || 0), 0);
   const pendingPoints = pendingSubs.reduce((sum, s) => sum + (s.points || 0), 0);
   const cap = config.pointCap || 40;
   const progressPct = Math.min(100, (approvedPoints / cap) * 100);
@@ -91,6 +95,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   // Category breakdown for student
   const categoryMap: Record<string, { hours: number; points: number; count: number }> = {};
   approvedSubs.forEach(s => {
+    if (s.category.toLowerCase().startsWith('bonus:')) return;
     const cat = s.category || 'General';
     if (!categoryMap[cat]) categoryMap[cat] = { hours: 0, points: 0, count: 0 };
     categoryMap[cat].hours += s.hours || 0;
@@ -99,6 +104,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   });
 
   const categoryList = Object.entries(categoryMap).sort((a, b) => b[1].points - a[1].points);
+  const eventPoints = categoryList.reduce((sum, [, stats]) => sum + stats.points, 0);
   const events = BetaStorage.getEvents();
   const calendarDays = useMemo(() => {
     const now = new Date();
@@ -109,7 +115,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     const dayMap: Record<number, Submission[]> = {};
     mySubs.forEach(sub => {
       const date = new Date(`${sub.date}T00:00:00`);
-      if (date.getFullYear() === year && date.getMonth() === month) (dayMap[date.getDate()] ||= []).push(sub);
+      if (!sub.category.toLowerCase().startsWith('bonus:') && date.getFullYear() === year && date.getMonth() === month) (dayMap[date.getDate()] ||= []).push(sub);
     });
     return { label: now.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }), firstDay, totalDays, dayMap };
   }, [mySubs]);
@@ -409,7 +415,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {/* Category Breakdown Card */}
             <div className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
               <h2 className="text-base font-bold text-zinc-900 flex items-center justify-between">
-                <span>My Activity Distribution</span>
+                <span>My Event Points</span>
                 <span className="text-xs font-mono text-zinc-500 font-normal">{categoryList.length} Categories</span>
               </h2>
 
@@ -418,7 +424,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               ) : (
                 <div className="space-y-3">
                   {categoryList.map(([cat, stats]) => {
-                    const pct = Math.round((stats.points / (approvedPoints || 1)) * 100);
+                    const pct = Math.round((stats.points / (eventPoints || 1)) * 100);
 
                     return (
                       <div key={cat} className="space-y-1 text-xs">
@@ -437,6 +443,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   })}
                 </div>
               )}
+            </div>
+
+            <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-amber-950">My Bonus Points</h3>
+                <p className="text-[11px] text-amber-800 font-mono">Private to your account; not an event category.</p>
+              </div>
+              <span className="text-xl font-bold text-amber-900 font-mono">{bonusPoints.toFixed(1)}</span>
             </div>
 
             {/* Official Chapter Events */}

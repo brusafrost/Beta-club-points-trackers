@@ -33,12 +33,11 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
 
   // Build matrix data of student email -> event -> approved points
   const { displayEvents, filteredRows } = useMemo(() => {
-    const approvedSubs = submissions.filter(s => {
-      if (s.status !== 'Approved') return false;
-      const isBonus = s.category.toLowerCase().startsWith('bonus:');
-      if (!isBonus || isOfficer) return true;
-      const submissionKey = s.studentId || s.studentEmail.toLowerCase().trim();
-      return submissionKey === viewerMemberId;
+    const approvedSubs = submissions.filter(s => s.status === 'Approved' && !s.category.toLowerCase().startsWith('bonus:'));
+    const bonusTotals: Record<string, number> = {};
+    submissions.filter(s => s.status === 'Approved' && s.category.toLowerCase().startsWith('bonus:')).forEach(s => {
+      const key = s.studentId || s.studentEmail.toLowerCase().trim();
+      bonusTotals[key] = (bonusTotals[key] || 0) + (s.points || 0);
     });
     const map: Record<string, Record<string, number>> = {};
 
@@ -64,9 +63,16 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
     let rows = members.map(m => {
       const key = m.studentId || m.email.toLowerCase().trim();
       const studentEvents = map[key] || {};
+      const eventPointsTotal = Object.values(studentEvents).reduce((sum, points) => sum + points, 0);
+      const canSeePrivatePoints = isOfficer || key === viewerMemberId;
+      const bonusPoints = canSeePrivatePoints ? bonusTotals[key] || 0 : 0;
+      const manualAdjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
       return {
         ...m,
-        eventPoints: studentEvents
+        eventPoints: studentEvents,
+        bonusPoints,
+        manualAdjustment,
+        totalPoints: eventPointsTotal + bonusPoints + manualAdjustment
       };
     });
 
@@ -103,15 +109,16 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   }, [filteredRows, page, pageSize]);
 
   const handleExportMatrixCSV = () => {
-    const headers = ['Student Name', ...(isOfficer ? ['Email', 'Student ID'] : []), 'Grade', ...displayEvents.map(e => `"${e.name.replace(/"/g, '""')}"`), 'Total Points', 'Point Cap'];
+    const headers = ['Student Name', ...(isOfficer ? ['Email', 'Student ID'] : []), 'Grade', ...displayEvents.map(e => `"${e.name.replace(/"/g, '""')}"`), 'Bonus (not event)', 'Manual adjustment', 'Total Points', 'Point Cap'];
     const rows = filteredRows.map(row => {
       const eventCols = displayEvents.map(e => (row.eventPoints[e.name] ? row.eventPoints[e.name].toFixed(1) : '0.0'));
       return [
         `"${row.name.replace(/"/g, '""')}"`,
         ...(isOfficer ? [`"${row.email.replace(/"/g, '""')}"`, row.studentId || ''] : []),
         row.gradeLevel || 11,
-        row.studentId || '',
         ...eventCols,
+        row.bonusPoints.toFixed(1),
+        row.manualAdjustment.toFixed(1),
         row.totalPoints.toFixed(1),
         cap
       ];
@@ -244,6 +251,8 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
                     <div className="truncate max-w-[140px]">{evt.name}</div>
                   </th>
                 ))}
+                <th className="py-3 px-3 min-w-[125px] text-right">{isOfficer ? 'Bonus (not event)' : 'My bonus'}</th>
+                <th className="py-3 px-3 min-w-[130px] text-right">{isOfficer ? 'Manual adjustment' : 'My adjustment'}</th>
                 <th className="py-3 px-4 text-right min-w-[120px]">
                   <button
                     type="button"
@@ -293,6 +302,8 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
                           </td>
                         );
                       })}
+                      <td className="py-2.5 px-3 text-right">{row.bonusPoints ? row.bonusPoints.toFixed(1) : '-'}</td>
+                      <td className="py-2.5 px-3 text-right">{row.manualAdjustment ? row.manualAdjustment.toFixed(1) : '-'}</td>
                       <td className="py-2.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <span className={`font-bold ${isCapped ? 'text-emerald-700' : 'text-zinc-900'}`}>

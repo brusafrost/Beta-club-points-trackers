@@ -99,6 +99,7 @@ export class BetaStorage {
     setDoc(doc(db, 'auditLogs', entry.id), entry);
   }
   public static getMemberById(id: string): Member | undefined { return localMembers.find(m => m.id === id); }
+  public static getMemberByStudentId(studentId: string): Member | undefined { return localMembers.find(m => (m.studentId || '') === studentId); }
   public static getMemberByEmail(email: string): Member | undefined { return localMembers.find(m => m.email.toLowerCase() === email.toLowerCase()); }
   public static getSubmissions(): Submission[] { return [...localSubmissions]; }
   public static getEvents(): EventItem[] { return [...localEvents]; }
@@ -201,8 +202,32 @@ export class BetaStorage {
     if (studentId && !/^\d{9,10}$/.test(studentId.trim())) return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
     const duplicate = studentId && localMembers.some(m => m.id !== memberId && m.studentId === studentId.trim());
     if (duplicate) return { success: false, error: 'Student ID already belongs to another member.' };
-    const updated = { ...member, firstName, lastName, name: `${firstName} ${lastName}`.trim(), email: newEmail.toLowerCase(), gradeLevel: gradeLevel || member.gradeLevel, studentId: studentId?.trim() || member.studentId };
-    setDoc(doc(db, 'members', member.id), updated);
+    setDoc(doc(db, 'members', member.id), {
+      firstName,
+      lastName,
+      name: `${firstName} ${lastName}`.trim(),
+      email: newEmail.toLowerCase(),
+      gradeLevel: gradeLevel || member.gradeLevel,
+      studentId: studentId?.trim() || member.studentId
+    }, { merge: true });
+    return { success: true };
+  }
+
+  public static async setMemberTotalPoints(memberId: string, desiredTotal: number): Promise<{ success: boolean; error?: string }> {
+    const member = this.getMemberById(memberId);
+    if (!member) return { success: false, error: 'Member not found.' };
+    if (!Number.isFinite(desiredTotal) || desiredTotal < 0) return { success: false, error: 'Enter a valid non-negative point total.' };
+    const submissionsSnap = await getDocs(collection(db, 'submissions'));
+    const memberSubmissions = submissionsSnap.docs
+      .map(snapshot => snapshot.data() as Submission)
+      .filter(sub => sub.status === 'Approved' && (sub.studentId ? sub.studentId === member.studentId : sub.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()));
+    const earnedPoints = memberSubmissions.reduce((sum, sub) => sum + (sub.points || 0), 0);
+    const adjustment = Math.round((desiredTotal - earnedPoints) * 10) / 10;
+    await setDoc(doc(db, 'members', member.id), {
+      totalPoints: Math.round(desiredTotal * 10) / 10,
+      manualPointAdjustment: adjustment
+    }, { merge: true });
+    this.log('Manual points adjustment', member.name, `Total set to ${desiredTotal.toFixed(1)} points; adjustment ${adjustment.toFixed(1)}.`);
     return { success: true };
   }
 
@@ -351,7 +376,7 @@ export class BetaStorage {
   public static approveSubmission(subId: string, customPoints?: number, notes?: string): { success: boolean; actualPoints: number; capMsg?: string; error?: string } {
     const sub = localSubmissions.find(s => s.id === subId);
     if (!sub) return { success: false, actualPoints: 0, error: 'Not found' };
-    const member = sub.studentId ? this.getMemberById(sub.studentId) : this.getMemberByEmail(sub.studentEmail);
+    const member = sub.studentId ? this.getMemberByStudentId(sub.studentId) : this.getMemberByEmail(sub.studentEmail);
     const requested = typeof customPoints === 'number' && !isNaN(customPoints) ? customPoints : sub.points;
     const currentPoints = member ? member.totalPoints : 0;
     const cap = localConfig.pointCap;
@@ -363,7 +388,7 @@ export class BetaStorage {
     this.log('Submission approved', sub.studentName, `${sub.category}: ${actual.toFixed(1)} points${notes ? `; ${notes}` : ''}`);
     
     // Recalculate member points asynchronously (after a short delay to let sub save)
-    setTimeout(() => this.recalculateMemberPoints(sub.studentEmail), 500);
+    setTimeout(() => this.recalculateMemberPoints(sub.studentId || sub.studentEmail), 500);
 
     const capMsg = requested > actual ? ` (Capped at ${actual.toFixed(1)} due to cap)` : '';
     return { success: true, actualPoints: actual, capMsg };
@@ -376,7 +401,7 @@ export class BetaStorage {
     if (notes) updated.officerNotes = notes;
     setDoc(doc(db, 'submissions', subId), updated);
     this.log('Submission rejected', sub.studentName, `${sub.category}${notes ? `; ${notes}` : ''}`);
-    setTimeout(() => this.recalculateMemberPoints(sub.studentEmail), 500);
+    setTimeout(() => this.recalculateMemberPoints(sub.studentId || sub.studentEmail), 500);
     return { success: true };
   }
 
@@ -387,13 +412,13 @@ export class BetaStorage {
     const actual = allowOverCap ? points : Math.min(points, Math.max(0, localConfig.pointCap - current));
     
     const newSub: Submission = {
-      id: `bonus-${Date.now()}`, studentName: member.name, studentEmail: member.email, category: `Bonus: ${reason}`,
+      id: `bonus-${Date.now()}`, studentName: member.name, studentId: member.studentId, studentEmail: member.email, category: `Bonus: ${reason}`,
       hours: 0, points: actual, date: new Date().toISOString().split('T')[0], assignedTo: 'Officer',
       proofUrl: '', status: 'Approved', timestamp: new Date().toISOString(), officerNotes: `Awarded by officer: ${reason}`
     };
     setDoc(doc(db, 'submissions', newSub.id), newSub);
     this.log('Bonus awarded', member.name, `${actual.toFixed(1)} points: ${reason}`);
-    setTimeout(() => this.recalculateMemberPoints(member.email), 500);
+    setTimeout(() => this.recalculateMemberPoints(member.studentId || member.email), 500);
     return { success: true, actualPoints: actual };
   }
 
@@ -416,21 +441,23 @@ export class BetaStorage {
       officerNotes: notes.trim() || 'Entered by officer'
     };
     setDoc(doc(db, 'submissions', submission.id), submission);
-    setTimeout(() => this.recalculateMemberPoints(member.email), 500);
+    setTimeout(() => this.recalculateMemberPoints(member.studentId || member.email), 500);
     return { success: true };
   }
 
-  public static recalculateMemberPoints(email: string): number {
-    const norm = email.toLowerCase().trim();
-    const member = localMembers.find(m => m.email.toLowerCase() === norm);
+  public static recalculateMemberPoints(studentIdOrEmail: string): number {
+    const norm = studentIdOrEmail.toLowerCase().trim();
+    const member = localMembers.find(m => (m.studentId || '').toLowerCase().trim() === norm) || localMembers.find(m => m.email.toLowerCase().trim() === norm);
     if (!member) return 0;
     
     getDocs(collection(db, 'submissions')).then(snap => {
       const allSubs = snap.docs.map(d => d.data() as Submission);
-      const studentSubs = allSubs.filter(s => s.studentEmail.toLowerCase() === norm && s.status === 'Approved');
-      const total = studentSubs.reduce((sum, s) => sum + (s.points || 0), 0);
+      const studentSubs = allSubs.filter(s => s.status === 'Approved' && (s.studentId
+        ? s.studentId === member.studentId
+        : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()));
+      const total = studentSubs.reduce((sum, s) => sum + (s.points || 0), 0) + (Number(member.manualPointAdjustment) || 0);
       const rounded = Math.round(total * 10) / 10;
-      setDoc(doc(db, 'members', member.id), { ...member, totalPoints: rounded }, { merge: true });
+      setDoc(doc(db, 'members', member.id), { totalPoints: rounded }, { merge: true });
     });
     return 0; // Async
   }
@@ -444,8 +471,8 @@ export class BetaStorage {
     });
     batch.commit().then(() => {
       // Lazy recalculate
-      const emails = new Set(pending.map(s => s.studentEmail));
-      emails.forEach(e => this.recalculateMemberPoints(e));
+      const identities = new Set(pending.map(s => s.studentId || s.studentEmail));
+      identities.forEach(identity => this.recalculateMemberPoints(identity));
     });
     this.log('Bulk approval', `${pending.length} submissions`, 'All pending submissions approved.');
     return { success: true, count: pending.length };

@@ -5,6 +5,7 @@ export interface Member {
   name: string;
   email: string;
   totalPoints: number;
+  manualPointAdjustment?: number;
   gradeLevel?: number;
   studentId?: string;
   hasPassword?: boolean;

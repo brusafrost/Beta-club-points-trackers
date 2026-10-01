@@ -17,12 +17,11 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
 
   // Build map: studentEmail -> { eventName -> points }
   const { displayEvents, rows } = useMemo(() => {
-    const approved = submissions.filter(s => {
-      if (s.status !== 'Approved') return false;
-      const isBonus = s.category.toLowerCase().startsWith('bonus:');
-      if (!isBonus || isOfficer) return true;
-      const submissionKey = s.studentId || s.studentEmail.toLowerCase().trim();
-      return submissionKey === viewerMemberId;
+    const approved = submissions.filter(s => s.status === 'Approved' && !s.category.toLowerCase().startsWith('bonus:'));
+    const bonusTotals: Record<string, number> = {};
+    submissions.filter(s => s.status === 'Approved' && s.category.toLowerCase().startsWith('bonus:')).forEach(s => {
+      const key = s.studentId || s.studentEmail.toLowerCase().trim();
+      bonusTotals[key] = (bonusTotals[key] || 0) + (s.points || 0);
     });
     const studentsMap: Record<string, Record<string, number>> = {};
 
@@ -41,7 +40,11 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
       const key = m.studentId || m.email.toLowerCase().trim();
       const map = studentsMap[key] || {};
       const cells = allEvents.map(ev => ({ event: ev, points: map[ev] || 0 }));
-      return { member: m, cells, total: cells.reduce((s, c) => s + c.points, 0) };
+      const eventTotal = cells.reduce((sum, cell) => sum + cell.points, 0);
+      const canSeePrivatePoints = isOfficer || key === viewerMemberId;
+      const bonus = canSeePrivatePoints ? bonusTotals[key] || 0 : 0;
+      const adjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
+      return { member: m, cells, eventTotal, bonus, adjustment, total: eventTotal + bonus + adjustment };
     });
 
     return { displayEvents: allEvents, rows };
@@ -65,7 +68,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
 
-  const chartMax = Math.max(...sorted.map(row => row.total), 1);
+  const chartMax = Math.max(...sorted.map(row => row.eventTotal), 1);
   const chartEvents = displayEvents;
   const eventColors = [
     'bg-zinc-800', 'bg-emerald-600', 'bg-sky-600', 'bg-amber-500',
@@ -79,8 +82,11 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
       ...(isOfficer ? [`"${(r.member.email || '').replace(/"/g, '""')}"`, r.member.studentId || ''] : []),
       r.member.gradeLevel || '',
       ...r.cells.map(c => (c.points || 0).toFixed(1)),
+      ...(isOfficer ? [r.bonus.toFixed(1), r.adjustment.toFixed(1)] : [r.member.studentId === viewerMemberId || r.member.email.toLowerCase().trim() === viewerMemberId ? r.bonus.toFixed(1) : '', r.member.studentId === viewerMemberId || r.member.email.toLowerCase().trim() === viewerMemberId ? r.adjustment.toFixed(1) : '']),
       r.total.toFixed(1)
     ]);
+    if (isOfficer) headers.splice(headers.length - 1, 0, 'Bonus (not event)', 'Manual adjustment');
+    else headers.splice(headers.length - 1, 0, 'My bonus (not event)', 'My adjustment');
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -127,7 +133,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
             {sorted.map(row => (
               <div key={`chart-${row.member.id}`} className="grid grid-cols-[minmax(92px,160px)_1fr_52px] items-center gap-2 text-[11px]">
                 <span className="truncate font-semibold text-zinc-800" title={row.member.name}>{row.member.name}</span>
-                <div className="h-4 flex rounded-md overflow-hidden bg-zinc-200" title={`${row.total.toFixed(1)} total points`}>
+                <div className="h-4 flex rounded-md overflow-hidden bg-zinc-200" title={`${row.eventTotal.toFixed(1)} event points; ${row.bonus.toFixed(1)} bonus points; ${row.adjustment.toFixed(1)} manual adjustment`}>
                   {chartEvents.map((event, index) => {
                     const points = row.cells.find(cell => cell.event === event.name)?.points || 0;
                     return points > 0 ? (
@@ -165,6 +171,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
               {displayEvents.map((ev, i) => (
                 <th key={i} className="py-2 px-3 text-right min-w-[110px]">{ev}</th>
               ))}
+              <th className="py-2 px-3 text-right min-w-[110px]">{isOfficer ? 'Bonus (not event)' : 'My bonus'}</th>
+              <th className="py-2 px-3 text-right min-w-[110px]">{isOfficer ? 'Manual adjustment' : 'My adjustment'}</th>
               <th className="py-2 px-3 text-right">Total</th>
             </tr>
           </thead>
@@ -177,6 +185,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
                 {r.cells.map((c, i) => (
                   <td key={i} className="py-2 px-3 text-right">{c.points > 0 ? c.points.toFixed(1) : '-'}</td>
                 ))}
+                <td className="py-2 px-3 text-right">{r.bonus ? r.bonus.toFixed(1) : '-'}</td>
+                <td className="py-2 px-3 text-right">{r.adjustment ? r.adjustment.toFixed(1) : '-'}</td>
                 <td className="py-2 px-3 text-right font-bold">{r.total.toFixed(1)}</td>
               </tr>
             ))}
