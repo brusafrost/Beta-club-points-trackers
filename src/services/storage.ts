@@ -1,6 +1,6 @@
 
 import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus } from '../types';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc, increment, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Local cache
@@ -229,6 +229,44 @@ export class BetaStorage {
     }, { merge: true });
     this.log('Manual points adjustment', member.name, `Total set to ${desiredTotal.toFixed(1)} points; adjustment ${adjustment.toFixed(1)}.`);
     return { success: true };
+  }
+
+  public static async awardBulkMeetingPoint(memberIds: string[], meetingName: string): Promise<{ success: boolean; awarded?: number; error?: string }> {
+    const uniqueMembers = [...new Set(memberIds)]
+      .map(memberId => this.getMemberById(memberId))
+      .filter((member): member is Member => !!member);
+    if (!meetingName.trim()) return { success: false, error: 'Enter a meeting name.' };
+    if (uniqueMembers.length === 0) return { success: false, error: 'No matching students were selected.' };
+
+    const meetingKey = meetingName.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+    if (!meetingKey) return { success: false, error: 'Meeting label must include a letter or number.' };
+    const auditEntry: AuditLog = {
+      id: `meeting-award-${meetingKey}`,
+      action: 'Bulk meeting points awarded',
+      target: `${uniqueMembers.length} students`,
+      details: `${meetingName.trim()}: 1 point added to each of ${uniqueMembers.length} matched students.`,
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      const awarded = await runTransaction(db, async transaction => {
+        const auditRef = doc(db, 'auditLogs', auditEntry.id);
+        const previousAward = await transaction.get(auditRef);
+        if (previousAward.exists()) return false;
+        uniqueMembers.forEach(member => {
+          transaction.update(doc(db, 'members', member.id), {
+            totalPoints: increment(1),
+            manualPointAdjustment: increment(1)
+          });
+        });
+        transaction.set(auditRef, auditEntry);
+        return true;
+      });
+      if (!awarded) return { success: false, error: 'This meeting label has already been used for a point award.' };
+      return { success: true, awarded: uniqueMembers.length };
+    } catch {
+      return { success: false, error: 'Could not save the point awards. No students were updated.' };
+    }
   }
 
   public static updateMemberInline(id: string, field: 'firstName' | 'lastName' | 'email' | 'totalPoints' | 'gradeLevel', value: string | number): boolean {

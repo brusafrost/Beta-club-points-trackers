@@ -102,6 +102,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [bonusReason, setBonusReason] = useState<string>('');
   const [bonusOverCap, setBonusOverCap] = useState<boolean>(false);
   const [bulkPointsText, setBulkPointsText] = useState<string>('');
+  const [meetingPointText, setMeetingPointText] = useState<string>('');
+  const [meetingPointLabel, setMeetingPointLabel] = useState<string>('');
+  const [excludedMeetingPointMemberIds, setExcludedMeetingPointMemberIds] = useState<Set<string>>(() => new Set());
+  const [isAwardingMeetingPoints, setIsAwardingMeetingPoints] = useState<boolean>(false);
 
   // Settings
   const [editCap, setEditCap] = useState<string>(String(config.pointCap || 40));
@@ -120,6 +124,46 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   useEffect(() => {
     ProofImageStore.getStorageEstimate().then(setStorageEstimate);
   }, [submissions]);
+
+  const meetingPointPreview = useMemo(() => {
+    const membersByStudentId = new Map<string, Member[]>();
+    members.forEach(member => {
+      const studentId = (member.studentId || '').trim();
+      if (!studentId) return;
+      membersByStudentId.set(studentId, [...(membersByStudentId.get(studentId) || []), member]);
+    });
+
+    const seen = new Set<string>();
+    const matched: Member[] = [];
+    const unmatched: string[] = [];
+    const ambiguous: string[] = [];
+    let invalid = 0;
+    let duplicates = 0;
+
+    meetingPointText.split(/[\s,;]+/).forEach(value => {
+      const studentId = value.trim().replace(/^['"]|['"]$/g, '');
+      if (!studentId || /^(student\s*id|student\s*number|id)$/i.test(studentId)) return;
+      if (!/^\d{9,10}$/.test(studentId)) {
+        invalid++;
+        return;
+      }
+      if (seen.has(studentId)) {
+        duplicates++;
+        return;
+      }
+      seen.add(studentId);
+      const idMatches = membersByStudentId.get(studentId) || [];
+      if (idMatches.length > 1) ambiguous.push(studentId);
+      else if (idMatches.length === 1) matched.push(idMatches[0]);
+      else unmatched.push(studentId);
+    });
+
+    return { matched, unmatched, ambiguous, invalid, duplicates };
+  }, [members, meetingPointText]);
+  const selectedMeetingPointMembers = useMemo(
+    () => meetingPointPreview.matched.filter(member => !excludedMeetingPointMemberIds.has(member.id)),
+    [meetingPointPreview, excludedMeetingPointMemberIds]
+  );
 
   // Derived datasets
   const pendingSubs = useMemo(() => submissions.filter(s => s.status === 'Pending'), [submissions]);
@@ -384,6 +428,30 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     });
     setBulkPointsText('');
     showToast({ title: 'Bulk Points Processed', message: `${added} entries saved${skipped ? `, ${skipped} skipped because of an invalid ID, event, or points value` : '.'}`, type: skipped ? 'warning' : 'success' });
+    onRefresh();
+  };
+
+  const handleBulkMeetingPointAward = async () => {
+    if (!meetingPointLabel.trim() || selectedMeetingPointMembers.length === 0) return;
+    const confirmed = window.confirm(`Award 1 point to the ${selectedMeetingPointMembers.length} selected students for "${meetingPointLabel.trim()}"? This updates points only, with no student submission or website event.`);
+    if (!confirmed) return;
+
+    setIsAwardingMeetingPoints(true);
+    const result = await BetaStorage.awardBulkMeetingPoint(
+      selectedMeetingPointMembers.map(member => member.id),
+      meetingPointLabel
+    );
+    setIsAwardingMeetingPoints(false);
+
+    if (!result.success) {
+      showToast({ title: 'Point Award Failed', message: result.error || 'The point award could not be saved.', type: 'error' });
+      return;
+    }
+
+    showToast({ title: 'Meeting Points Awarded', message: `Added 1 point to ${result.awarded} matched students.`, type: 'success' });
+    setMeetingPointText('');
+    setMeetingPointLabel('');
+    setExcludedMeetingPointMemberIds(new Set());
     onRefresh();
   };
 
@@ -1276,7 +1344,102 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
           <div className="lg:col-span-12 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
             <div>
-              <h2 className="text-base font-bold text-zinc-900">Bulk Point Entry</h2>
+              <h2 className="text-base font-bold text-zinc-900">Bulk Meeting Point Award</h2>
+              <p className="text-xs text-zinc-500 font-mono">1 point for each unique student ID matched to the roster.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label htmlFor="meeting-point-label" className="text-xs font-semibold text-zinc-700">Meeting Label</label>
+                <input
+                  id="meeting-point-label"
+                  type="text"
+                  value={meetingPointLabel}
+                  onChange={e => setMeetingPointLabel(e.target.value)}
+                  placeholder="e.g. October Club Meeting"
+                  className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <label htmlFor="meeting-student-ids" className="text-xs font-semibold text-zinc-700">Student IDs</label>
+                <textarea
+                  id="meeting-student-ids"
+                  value={meetingPointText}
+                  onChange={e => setMeetingPointText(e.target.value)}
+                  placeholder="Paste student IDs from the form responses"
+                  rows={3}
+                  className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-mono">
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-lg">Matched: {meetingPointPreview.matched.length}</div>
+              <div className="p-2.5 bg-amber-50 text-amber-800 rounded-lg">Not found: {meetingPointPreview.unmatched.length}</div>
+              <div className="p-2.5 bg-rose-50 text-rose-800 rounded-lg">Ambiguous: {meetingPointPreview.ambiguous.length}</div>
+              <div className="p-2.5 bg-zinc-100 text-zinc-700 rounded-lg">Invalid: {meetingPointPreview.invalid}</div>
+              <div className="p-2.5 bg-zinc-100 text-zinc-700 rounded-lg">Duplicates ignored: {meetingPointPreview.duplicates}</div>
+            </div>
+            {(meetingPointPreview.matched.length > 0 || meetingPointPreview.unmatched.length > 0 || meetingPointPreview.ambiguous.length > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="border border-zinc-200 rounded-xl p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-zinc-700">Matched students</h3>
+                    <label className="flex items-center gap-2 text-zinc-600">
+                      <input
+                        type="checkbox"
+                        checked={meetingPointPreview.matched.length > 0 && selectedMeetingPointMembers.length === meetingPointPreview.matched.length}
+                        onChange={event => setExcludedMeetingPointMemberIds(
+                          event.target.checked
+                            ? new Set()
+                            : new Set(meetingPointPreview.matched.map(member => member.id))
+                        )}
+                        aria-label="Select all matched students"
+                        className="rounded"
+                      />
+                      Select all
+                    </label>
+                  </div>
+                  <ul className="max-h-36 overflow-y-auto divide-y divide-zinc-100">
+                    {meetingPointPreview.matched.map(member => (
+                      <li key={member.id} className="py-1.5 flex items-center justify-between gap-3">
+                        <label className="flex min-w-0 items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!excludedMeetingPointMemberIds.has(member.id)}
+                            onChange={() => setExcludedMeetingPointMemberIds(previous => {
+                              const next = new Set(previous);
+                              if (next.has(member.id)) next.delete(member.id);
+                              else next.add(member.id);
+                              return next;
+                            })}
+                            aria-label={`Award one point to ${member.name}`}
+                            className="rounded"
+                          />
+                          <span className="truncate text-zinc-800">{member.name}</span>
+                        </label>
+                        <span className="shrink-0 font-mono text-zinc-500">{member.studentId}</span>
+                      </li>
+                    ))}
+                    {meetingPointPreview.matched.length === 0 && <li className="text-zinc-400">No roster matches yet.</li>}
+                  </ul>
+                </div>
+                <div className="border border-zinc-200 rounded-xl p-3 space-y-2">
+                  <h3 className="font-semibold text-zinc-700">IDs to review</h3>
+                  <p className="text-amber-800 break-all">Not found: {meetingPointPreview.unmatched.join(', ') || 'None'}</p>
+                  <p className="text-rose-800 break-all">Multiple roster matches: {meetingPointPreview.ambiguous.join(', ') || 'None'}</p>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleBulkMeetingPointAward}
+              disabled={!meetingPointLabel.trim() || selectedMeetingPointMembers.length === 0 || isAwardingMeetingPoints}
+              className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-xl text-xs font-semibold"
+            >{isAwardingMeetingPoints ? 'Saving...' : `Award 1 Point to ${selectedMeetingPointMembers.length} Selected`}</button>
+          </div>
+
+          <div className="lg:col-span-12 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900">Bulk Point Entries With Student History</h2>
               <p className="text-xs text-zinc-500 font-mono">Paste one entry per line: student ID, points, event, optional note.</p>
             </div>
             <textarea
