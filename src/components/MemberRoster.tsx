@@ -56,6 +56,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
   const [editStudentId, setEditStudentId] = useState<string>('');
   const [editEmail, setEditEmail] = useState<string>('');
   const [editGrade, setEditGrade] = useState<number>(11);
+  const [editPoints, setEditPoints] = useState<string>('0');
 
   // Bulk import modal state
   const [showBulkModal, setShowBulkModal] = useState<boolean>(false);
@@ -185,19 +186,30 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
     setEditStudentId(m.studentId || '');
     setEditEmail(m.email);
     setEditGrade(m.gradeLevel || 11);
+    setEditPoints(String(m.totalPoints || 0));
   };
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     if (!/^\d{9,10}$/.test(editStudentId.trim())) {
       showToast({ title: 'Invalid Student ID', message: 'Student ID must contain 9 or 10 numbers.', type: 'error' });
       return;
     }
+    const points = Number(editPoints);
+    if (!Number.isFinite(points) || points < 0) {
+      showToast({ title: 'Invalid Points', message: 'Enter a valid non-negative point total.', type: 'error' });
+      return;
+    }
+    const pointsResult = await BetaStorage.setMemberTotalPoints(id, points);
+    if (!pointsResult.success) {
+      showToast({ title: 'Points Not Saved', message: pointsResult.error || 'Could not update member points.', type: 'error' });
+      return;
+    }
     const res = BetaStorage.updateProfile(id, editFirstName, editLastName, editEmail, editGrade, editStudentId);
-    setEditingId(null);
     if (res.success) {
+      setEditingId(null);
       showToast({
         title: 'Member Updated',
-        message: `Successfully updated profile for ${editFirstName} ${editLastName}.`,
+        message: `Updated profile and point total for ${editFirstName} ${editLastName}.`,
         type: 'success'
       });
     } else {
@@ -709,10 +721,25 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
 
                       {/* Points */}
                       <td className="py-2.5 px-4">
-                        <div className="font-bold text-zinc-900 flex items-center gap-1.5">
-                          <span>{pts.toFixed(1)}</span>
-                          <span className="text-[10px] text-zinc-400 font-normal">/ {cap} pts</span>
-                        </div>
+                        {isEditing ? (
+                          <label className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={editPoints}
+                              onChange={e => setEditPoints(e.target.value)}
+                              aria-label={`Total points for ${m.name}`}
+                              className="w-20 px-2 py-1 bg-white border border-zinc-300 rounded text-xs font-mono font-bold text-zinc-900"
+                            />
+                            <span>/ {cap}</span>
+                          </label>
+                        ) : (
+                          <div className="font-bold text-zinc-900 flex items-center gap-1.5">
+                            <span>{pts.toFixed(1)}</span>
+                            <span className="text-[10px] text-zinc-400 font-normal">/ {cap} pts</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Standing / Cap Status */}
