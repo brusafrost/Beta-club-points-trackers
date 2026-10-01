@@ -330,17 +330,6 @@ export class BetaStorage {
     const subId = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const finalCategory = category.trim();
 
-    // If this category isn't already present as an event, add it (non-beta) so it appears in pickers and the matrix
-    const exists = localEvents.some(e => e.name.toLowerCase() === finalCategory.toLowerCase());
-    if (!exists) {
-      try {
-        this.addEvent({ name: finalCategory, type: 'NONBETA', description: 'Added from submission' });
-      } catch (err) {
-        // Non-fatal: proceed with submission even if event creation fails
-        console.warn('Failed to auto-create event for submission category', finalCategory, err);
-      }
-    }
-
     const newSub: Submission = {
       id: subId, studentName: studentName.trim(), studentId: studentId?.trim(), studentEmail: studentEmail.toLowerCase().trim(),
       category: finalCategory, hours, points: calculatedPoints, date, assignedTo: assignedTo.trim() || 'Officer',
