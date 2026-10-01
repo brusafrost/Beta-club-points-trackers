@@ -202,17 +202,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
         {/* 3 Metric Counts + Action Buttons */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-center min-w-[85px]">
-              <div className="text-[10px] font-mono font-semibold uppercase text-zinc-500">Approved</div>
+          <div className="grid grid-cols-3 gap-1 sm:gap-2.5">
+            <div className="min-w-0 bg-zinc-50 p-2 sm:p-3 rounded-xl border border-zinc-200 text-center sm:min-w-[85px]">
+              <div className="text-[9px] sm:text-[10px] leading-tight font-mono font-semibold uppercase text-zinc-500">Approved</div>
               <div className="text-xl sm:text-2xl font-bold text-emerald-700 font-mono mt-0.5">{approvedPoints.toFixed(1)}</div>
             </div>
-            <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-center min-w-[85px]">
-              <div className="text-[10px] font-mono font-semibold uppercase text-zinc-500">Pending</div>
+            <div className="min-w-0 bg-zinc-50 p-2 sm:p-3 rounded-xl border border-zinc-200 text-center sm:min-w-[85px]">
+              <div className="text-[9px] sm:text-[10px] leading-tight font-mono font-semibold uppercase text-zinc-500">Pending</div>
               <div className="text-xl sm:text-2xl font-bold text-amber-700 font-mono mt-0.5">{pendingPoints.toFixed(1)}</div>
             </div>
-            <div className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 text-center min-w-[85px]">
-              <div className="text-[10px] font-mono font-semibold uppercase text-zinc-500">Submissions</div>
+            <div className="min-w-0 bg-zinc-50 p-2 sm:p-3 rounded-xl border border-zinc-200 text-center sm:min-w-[85px]">
+              <div className="text-[9px] sm:text-[10px] leading-tight font-mono font-semibold uppercase text-zinc-500">
+                <span className="sm:hidden">Logs</span>
+                <span className="hidden sm:inline">Submissions</span>
+              </div>
               <div className="text-xl sm:text-2xl font-bold text-zinc-900 font-mono mt-0.5">{mySubs.length}</div>
             </div>
           </div>
@@ -221,7 +224,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <button
               type="button"
               onClick={onNavigateToSubmit}
-              className="py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+              className="min-h-11 py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Submit Hours</span>
@@ -232,7 +235,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 setInquiryPrefill('');
                 setIsCommentModalOpen(true);
               }}
-              className="py-2 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-zinc-200"
+              className="min-h-11 px-3 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-zinc-200"
               title="Send inquiry directly to officers"
             >
               <MessageSquare className="w-4 h-4 text-zinc-600" />
@@ -248,7 +251,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-              className={`px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`min-h-11 px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'bg-white text-zinc-900 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'
@@ -260,7 +263,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('submissions')}
-              className={`px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`min-h-11 px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'submissions'
                 ? 'bg-white text-zinc-900 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'
@@ -276,7 +279,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('students')}
-              className={`px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
+              className={`min-h-11 px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'students'
                 ? 'bg-white text-zinc-900 shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900'

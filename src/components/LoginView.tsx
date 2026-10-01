@@ -150,7 +150,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               setErrorMsg('');
               setSuccessMsg('');
             }}
-            className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-h-11 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               roleMode === 'student'
                 ? 'bg-white text-zinc-900 shadow-xs font-bold'
                 : 'text-zinc-600 hover:text-zinc-900'
@@ -166,7 +166,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               setErrorMsg('');
               setSuccessMsg('');
             }}
-            className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-h-11 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               roleMode === 'officer'
                 ? 'bg-white text-zinc-900 shadow-xs font-bold'
                 : 'text-zinc-600 hover:text-zinc-900'
@@ -201,7 +201,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   setStudentMode('signin');
                   setErrorMsg('');
                 }}
-                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 min-h-11 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                   studentMode === 'signin'
                     ? 'bg-white text-zinc-900 shadow-xs font-bold'
                     : 'text-zinc-500 hover:text-zinc-900'
@@ -216,7 +216,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   setStudentMode('register');
                   setErrorMsg('');
                 }}
-                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 min-h-11 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
                   studentMode === 'register'
                     ? 'bg-white text-zinc-900 shadow-xs font-bold'
                     : 'text-zinc-500 hover:text-zinc-900'
@@ -230,7 +230,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <form onSubmit={handleStudentSubmit} className="space-y-3.5 text-xs">
               {studentMode === 'register' && (
                 <>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div className="space-y-1">
                       <label className="font-semibold text-zinc-700">First Name</label>
                       <input
@@ -239,7 +239,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                         value={firstName}
                         onChange={e => setFirstName(e.target.value)}
                         placeholder="Alex"
-                        className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+                        className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                       />
                     </div>
                     <div className="space-y-1">
@@ -250,7 +250,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                         value={lastName}
                         onChange={e => setLastName(e.target.value)}
                         placeholder="Morgan"
-                        className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+                        className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                       />
                     </div>
                   </div>
@@ -259,11 +259,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     <label className="font-semibold text-zinc-700">Student ID (9–10 numbers)</label>
                     <input
                       type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={10}
                       required
                       value={studentId}
                       onChange={e => setStudentId(e.target.value)}
                       placeholder="123456789"
-                      className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
+                      className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                     />
                   </div>
 
@@ -272,7 +275,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     <select
                       value={gradeLevel}
                       onChange={e => setGradeLevel(Number(e.target.value))}
-                      className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs font-mono font-medium"
+                      className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500 font-mono font-medium"
                     >
                       <option value={9}>9th Grade (Freshman)</option>
                       <option value={10}>10th Grade (Sophomore)</option>
@@ -287,11 +290,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 <label className="font-semibold text-zinc-700">{studentMode === 'register' ? 'Email Address (Optional)' : 'Student ID (9–10 numbers)'}</label>
                 <input
                   type={studentMode === 'register' ? 'email' : 'text'}
+                  inputMode={studentMode === 'register' ? 'email' : 'numeric'}
+                  autoComplete={studentMode === 'register' ? 'email' : 'off'}
+                  maxLength={studentMode === 'signin' ? 10 : undefined}
                   required={studentMode === 'signin'}
                   value={studentMode === 'register' ? email : studentId}
                   onChange={e => studentMode === 'register' ? setEmail(e.target.value) : setStudentId(e.target.value)}
                   placeholder={studentMode === 'register' ? 'student@school.edu' : '123456789'}
-                  className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
+                  className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                 />
               </div>
 
@@ -302,16 +308,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete={studentMode === 'register' ? 'new-password' : 'current-password'}
                     required={studentMode === 'register'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full p-2.5 pr-9 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
+                    className="w-full min-h-11 px-3 py-2.5 pr-12 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-zinc-500 hover:text-zinc-900"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -324,10 +332,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500 text-xs"
+                    className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
                   />
                 </div>
               )}
@@ -335,7 +344,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                className="w-full min-h-12 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <span>{isLoading ? 'Processing...' : studentMode === 'signin' ? 'Sign In to Dashboard' : 'Complete Registration & Join'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />

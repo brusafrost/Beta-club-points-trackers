@@ -172,7 +172,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500"
+            className="w-full min-h-11 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-zinc-500"
           >
             <optgroup label="Official Beta Club Projects">
               {events.filter(e => e.type === 'BETA').map(e => (
@@ -201,7 +201,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
               value={customCategory}
               onChange={(e) => setCustomCategory(e.target.value)}
               placeholder="e.g. Red Cross Blood Drive Assistant"
-              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500"
+              className="w-full min-h-11 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-zinc-500"
             />
           </div>
         )}
@@ -222,7 +222,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
               value={hours}
               onChange={(e) => setHours(e.target.value)}
               placeholder="2.0"
-              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500"
+              className="w-full min-h-11 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-zinc-500"
             />
             <p className="text-[11px] text-zinc-500 font-mono">
               Calculates to: <strong>{estimatedPoints.toFixed(1)} Beta Points</strong>
@@ -238,7 +238,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500"
+              className="w-full min-h-11 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-zinc-500"
             />
           </div>
         </div>
@@ -251,7 +251,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
           <select
             value={assignedTo}
             onChange={(e) => setAssignedTo(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500"
+            className="w-full min-h-11 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-zinc-500"
           >
             <option value="Officer">Officer (General Officer Review)</option>
             <option value="Faculty Sponsor">Officer (Faculty Sponsor)</option>
@@ -299,7 +299,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
                 <div className="text-xs text-zinc-600 font-medium">
                   Upload signed service slip, volunteer certificate, or attendance photo
                 </div>
-                <label className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-800 font-semibold rounded-lg cursor-pointer text-xs transition-colors shadow-xs">
+                <label className="inline-flex min-h-11 items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-800 font-semibold rounded-lg cursor-pointer text-xs transition-colors shadow-xs">
                   <Upload className="w-3.5 h-3.5" />
                   <span>Choose Photo File</span>
                   <input
@@ -328,7 +328,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
             value={comments}
             onChange={(e) => setComments(e.target.value)}
             placeholder="Briefly describe tasks performed or supervisor name/contact info..."
-            className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 font-mono text-xs focus:outline-hidden focus:border-zinc-500 resize-none"
+            className="w-full min-h-11 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-base sm:text-xs text-zinc-900 font-mono focus:outline-hidden focus:border-zinc-500 resize-none"
           />
         </div>
 
