@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AuthSession, Member, Submission, EventItem, Officer, AppConfig } from './types';
+import { AuthSession, Member, Submission, EventItem, Officer, AppConfig, MeetingPointAward } from './types';
 import { BetaStorage } from './services/storage';
 import { Navbar } from './components/Navbar';
 import { LoginView } from './components/LoginView';
@@ -22,6 +22,7 @@ export default function App() {
   });
   const [members, setMembers] = useState<Member[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [meetingPointAwards, setMeetingPointAwards] = useState<MeetingPointAward[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [officers, setOfficers] = useState<Officer[]>([]);
 
@@ -36,6 +37,7 @@ export default function App() {
     setConfig(BetaStorage.getConfig());
     setMembers(BetaStorage.getMembers());
     setSubmissions(BetaStorage.getSubmissions());
+    setMeetingPointAwards(BetaStorage.getMeetingPointAwards());
     setEvents(BetaStorage.getEvents());
     setOfficers(BetaStorage.getOfficers());
   }, []);
@@ -109,6 +111,7 @@ export default function App() {
             <StudentDashboard
               member={currentMember}
               submissions={submissions}
+              meetingPointAwards={meetingPointAwards}
               config={config}
               onNavigateToSubmit={() => setActiveSection('submit')}
               onViewProof={setSelectedProofSub}

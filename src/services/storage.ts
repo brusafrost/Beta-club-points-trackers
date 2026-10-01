@@ -1,12 +1,14 @@
 
-import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus } from '../types';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc, increment, runTransaction } from 'firebase/firestore';
+import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus, MeetingPointAward } from '../types';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { awardBulkMeetingPoints } from './bulkMeetingPoints';
 
 // Local cache
 let localMembers: Member[] = [];
 let localDeletedMembers: DeletedMember[] = [];
 let localAuditLogs: AuditLog[] = [];
+let localMeetingPointAwards: MeetingPointAward[] = [];
 let localSubmissions: Submission[] = [];
 let localEvents: EventItem[] = [];
 let localOfficers: Officer[] = [];
@@ -69,6 +71,12 @@ export class BetaStorage {
       triggerChange();
     });
 
+    onSnapshot(collection(db, 'meetingPointAwards'), (snap) => {
+      localMeetingPointAwards = snap.docs.map(d => d.data() as MeetingPointAward);
+      localMeetingPointAwards.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      triggerChange();
+    });
+
     // Listen to submissions
     onSnapshot(collection(db, 'submissions'), (snap) => {
       localSubmissions = snap.docs.map(d => d.data() as Submission);
@@ -94,6 +102,7 @@ export class BetaStorage {
   public static getMembers(): Member[] { return [...localMembers]; }
   public static getDeletedMembers(): DeletedMember[] { return [...localDeletedMembers]; }
   public static getAuditLogs(): AuditLog[] { return [...localAuditLogs]; }
+  public static getMeetingPointAwards(): MeetingPointAward[] { return [...localMeetingPointAwards]; }
   private static log(action: string, target: string, details: string): void {
     const entry: AuditLog = { id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, action, target, details, timestamp: new Date().toISOString() };
     setDoc(doc(db, 'auditLogs', entry.id), entry);
@@ -235,38 +244,7 @@ export class BetaStorage {
     const uniqueMembers = [...new Set(memberIds)]
       .map(memberId => this.getMemberById(memberId))
       .filter((member): member is Member => !!member);
-    if (!meetingName.trim()) return { success: false, error: 'Enter a meeting name.' };
-    if (uniqueMembers.length === 0) return { success: false, error: 'No matching students were selected.' };
-
-    const meetingKey = meetingName.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
-    if (!meetingKey) return { success: false, error: 'Meeting label must include a letter or number.' };
-    const auditEntry: AuditLog = {
-      id: `meeting-award-${meetingKey}`,
-      action: 'Bulk meeting points awarded',
-      target: `${uniqueMembers.length} students`,
-      details: `${meetingName.trim()}: 1 point added to each of ${uniqueMembers.length} matched students.`,
-      timestamp: new Date().toISOString()
-    };
-
-    try {
-      const awarded = await runTransaction(db, async transaction => {
-        const auditRef = doc(db, 'auditLogs', auditEntry.id);
-        const previousAward = await transaction.get(auditRef);
-        if (previousAward.exists()) return false;
-        uniqueMembers.forEach(member => {
-          transaction.update(doc(db, 'members', member.id), {
-            totalPoints: increment(1),
-            manualPointAdjustment: increment(1)
-          });
-        });
-        transaction.set(auditRef, auditEntry);
-        return true;
-      });
-      if (!awarded) return { success: false, error: 'This meeting label has already been used for a point award.' };
-      return { success: true, awarded: uniqueMembers.length };
-    } catch {
-      return { success: false, error: 'Could not save the point awards. No students were updated.' };
-    }
+    return awardBulkMeetingPoints(db, uniqueMembers, meetingName);
   }
 
   public static updateMemberInline(id: string, field: 'firstName' | 'lastName' | 'email' | 'totalPoints' | 'gradeLevel', value: string | number): boolean {

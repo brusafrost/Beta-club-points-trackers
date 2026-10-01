@@ -8,7 +8,7 @@ interface StudentSettingsModalProps {
   member: Member;
   isOpen: boolean;
   onClose: () => void;
-  onProfileUpdated: (updatedMember: Member) => void;
+  onProfileUpdated: () => void;
 }
 
 export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({

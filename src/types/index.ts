@@ -25,6 +25,15 @@ export interface AuditLog {
   timestamp: string;
 }
 
+export interface MeetingPointAward {
+  id: string;
+  memberId: string;
+  meetingName: string;
+  points: number;
+  awardedBy: string;
+  timestamp: string;
+}
+
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface Submission {

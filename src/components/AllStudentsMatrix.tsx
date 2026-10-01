@@ -135,13 +135,13 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
                 <span className="truncate font-semibold text-zinc-800" title={row.member.name}>{row.member.name}</span>
                 <div className="h-4 flex rounded-md overflow-hidden bg-zinc-200" title={`${row.eventTotal.toFixed(1)} event points; ${row.bonus.toFixed(1)} bonus points; ${row.adjustment.toFixed(1)} manual adjustment`}>
                   {chartEvents.map((event, index) => {
-                    const points = row.cells.find(cell => cell.event === event.name)?.points || 0;
+                    const points = row.cells.find(cell => cell.event === event)?.points || 0;
                     return points > 0 ? (
                       <div
-                        key={`${row.member.id}-${event.name}`}
+                        key={`${row.member.id}-${event}`}
                         className={`${eventColors[index % eventColors.length]} h-full`}
                         style={{ width: `${(points / chartMax) * 100}%` }}
-                        title={`${event.name}: ${points.toFixed(1)} pts`}
+                        title={`${event}: ${points.toFixed(1)} pts`}
                       />
                     ) : null;
                   })}
@@ -152,9 +152,9 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-4 pt-3 border-t border-zinc-200">
             {chartEvents.map((event, index) => (
-              <span key={`legend-${event.name}`} className="flex items-center gap-1 text-[10px] text-zinc-600" title={event.name}>
+              <span key={`legend-${event}`} className="flex items-center gap-1 text-[10px] text-zinc-600" title={event}>
                 <span className={`w-2 h-2 rounded-sm ${eventColors[index % eventColors.length]}`} />
-                <span className="max-w-[150px] truncate">{event.name}</span>
+                <span className="max-w-[150px] truncate">{event}</span>
               </span>
             ))}
           </div>

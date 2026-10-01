@@ -310,7 +310,9 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
                             {(row.totalPoints || 0).toFixed(1)}
                           </span>
                           {isCapped && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" title="Cap Met" />
+                            <span title="Cap Met">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+                            </span>
                           )}
                         </div>
                       </td>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Member, Submission, AppConfig } from '../types';
+import { Member, Submission, AppConfig, MeetingPointAward } from '../types';
 import { BetaStorage } from '../services/storage';
 import { formatDate } from '../utils/dateFormatter';
 import { useToast } from '../context/ToastContext';
@@ -30,6 +30,7 @@ import { AllStudentsMatrix } from './AllStudentsMatrix';
 interface StudentDashboardProps {
   member: Member;
   submissions: Submission[];
+  meetingPointAwards: MeetingPointAward[];
   config: AppConfig;
   onNavigateToSubmit: () => void;
   onViewProof: (sub: Submission) => void;
@@ -39,6 +40,7 @@ interface StudentDashboardProps {
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   member,
   submissions,
+  meetingPointAwards,
   config,
   onNavigateToSubmit,
   onViewProof,
@@ -59,6 +61,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       s => s.studentId ? s.studentId === member.studentId : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()
     );
   }, [submissions, member.email, member.studentId]);
+
+  const myMeetingPointAwards = useMemo(
+    () => meetingPointAwards.filter(award => award.memberId === member.id),
+    [meetingPointAwards, member.id]
+  );
 
   const approvedSubs = useMemo(() => mySubs.filter(s => s.status === 'Approved'), [mySubs]);
   const pendingSubs = useMemo(() => mySubs.filter(s => s.status === 'Pending'), [mySubs]);
@@ -596,6 +603,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               />
             </div>
           </div>
+
+          {myMeetingPointAwards.length > 0 && (
+            <section aria-labelledby="meeting-point-awards-heading" className="space-y-3 border-t border-zinc-100 pt-5">
+              <div>
+                <h3 id="meeting-point-awards-heading" className="text-sm font-bold text-zinc-900">Points Awarded to You</h3>
+                <p className="text-xs text-zinc-500 font-mono">Individual point credits from your chapter officer.</p>
+              </div>
+              <div className="space-y-2">
+                {myMeetingPointAwards.map(award => (
+                  <div key={award.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <Award className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-900">{award.meetingName}</p>
+                        <p className="text-xs text-zinc-600">Your chapter officer awarded this point directly to you.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <span className="text-xs font-mono text-zinc-500">{formatDate(award.timestamp)}</span>
+                      <span className="shrink-0 text-sm font-bold text-emerald-800">+{award.points.toFixed(1)} pt</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Detailed Itemized Submissions List */}
           {filteredSubs.length === 0 ? (
