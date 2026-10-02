@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Member, Submission, EventItem, Officer, AppConfig } from '../types';
 import { BetaStorage } from '../services/storage';
 import { formatDate, formatDateTime, formatFriendlyTimestamp } from '../utils/dateFormatter';
+import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { ProofImageStore } from '../services/imageStore';
 import { useToast } from '../context/ToastContext';
 import {
@@ -197,9 +198,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   // Submissions for the selected student in History Tab
   const selectedStudentSubs = useMemo(() => {
     if (!selectedStudent) return [];
-    let list = submissions.filter(
-      s => s.studentId ? s.studentId === selectedStudent.studentId : s.studentEmail.toLowerCase().trim() === selectedStudent.email.toLowerCase().trim()
-    );
+    let list = submissions.filter(submission => submissionBelongsToMember(submission, selectedStudent));
     if (historyStatusFilter !== 'ALL') {
       list = list.filter(s => s.status === historyStatusFilter);
     }
@@ -423,7 +422,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     let skipped = 0;
     lines.forEach(line => {
       const [studentId, pointsText, eventName, ...noteParts] = line.split(/\t|,/).map(value => value.trim());
-      const member = members.find(item => item.studentId === studentId);
+      const matchingMembers = members.filter(item => item.studentId === studentId);
+      const member = matchingMembers.length === 1 ? matchingMembers[0] : undefined;
       const points = Number(pointsText);
       if (!member || !Number.isFinite(points) || points <= 0 || !eventName) {
         skipped++;
@@ -439,7 +439,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
   const handleBulkMeetingPointAward = async () => {
     if (!meetingPointLabel.trim() || selectedMeetingPointMembers.length === 0) return;
-    const confirmed = window.confirm(`Award 1 point to the ${selectedMeetingPointMembers.length} selected students for "${meetingPointLabel.trim()}"? This updates points only, with no student submission or website event.`);
+    const confirmed = window.confirm(`Award 1 point to the ${selectedMeetingPointMembers.length} selected students for "${meetingPointLabel.trim()}"? Students who already received this meeting point will be skipped. This creates no submission or website event.`);
     if (!confirmed) return;
 
     setIsAwardingMeetingPoints(true);
@@ -454,7 +454,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       return;
     }
 
-    showToast({ title: 'Meeting Points Awarded', message: `Added 1 point to ${result.awarded} matched students.`, type: 'success' });
+    const skippedMessage = result.skipped ? ` ${result.skipped} already-awarded students were skipped.` : '';
+    showToast({ title: 'Meeting Points Awarded', message: `Added 1 point to ${result.awarded} students.${skippedMessage}`, type: 'success' });
     setMeetingPointText('');
     setMeetingPointLabel('');
     setExcludedMeetingPointMemberIds(new Set());
@@ -479,9 +480,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   };
 
   const handleDownloadStudentTranscript = (student: Member) => {
-    const studentSubs = submissions.filter(
-      s => s.studentId ? s.studentId === student.studentId : s.studentEmail.toLowerCase().trim() === student.email.toLowerCase().trim()
-    );
+    const studentSubs = submissions.filter(submission => submissionBelongsToMember(submission, student));
     const headers = ['Submission ID', 'Activity Category', 'Service Date', 'Hours Logged', 'Credit Points Earned', 'Status', 'Reviewer', 'Student Comment', 'Officer Notes'];
     const rows = studentSubs.map(s => [
       s.id,
@@ -908,7 +907,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             <div className="space-y-3">
               {filteredInbox.map((sub) => {
                 const member = sub.studentId
-                  ? members.find(m => m.studentId === sub.studentId)
+                  ? BetaStorage.getMemberByStudentId(sub.studentId)
                   : members.find(m => m.email.toLowerCase().trim() === sub.studentEmail.toLowerCase().trim());
                 const currentPts = member ? member.totalPoints : 0;
                 const pointsAfterApprove = Math.min(cap, currentPts + (sub.points || 0));
@@ -1131,7 +1130,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
               {filteredStudentsList.map((m) => {
                 const isSelected = selectedStudent?.email.toLowerCase().trim() === m.email.toLowerCase().trim();
-                const memSubs = submissions.filter(s => s.studentId ? s.studentId === m.studentId : s.studentEmail.toLowerCase().trim() === m.email.toLowerCase().trim());
+                const memSubs = submissions.filter(submission => submissionBelongsToMember(submission, m));
                 const pendingCount = memSubs.filter(s => s.status === 'Pending').length;
 
                 return (
@@ -1189,7 +1188,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-zinc-500 font-mono mt-0.5">
-                      {selectedStudent.email} &bull; Registered: {formatDate(selectedStudent.createdAt)}
+                      {selectedStudent.email} &bull; Registered: {formatDate(selectedStudent.createdAt || '')}
                     </p>
                   </div>
 

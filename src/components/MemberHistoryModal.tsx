@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Member, Submission, AppConfig } from '../types';
 import { formatDate } from '../utils/dateFormatter';
+import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { useToast } from '../context/ToastContext';
 import { X, Calendar, Clock, Award, CheckCircle2, AlertCircle, Clock3, Download, ExternalLink, User, ShieldCheck } from 'lucide-react';
 
@@ -29,9 +30,9 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
 
   const memberSubs = useMemo(() => {
     return submissions
-      .filter(s => s.studentId ? s.studentId === member.studentId : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim())
+      .filter(submission => submissionBelongsToMember(submission, member))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [submissions, member.email]);
+  }, [submissions, member]);
 
   const stats = useMemo(() => {
     let approvedPts = 0;

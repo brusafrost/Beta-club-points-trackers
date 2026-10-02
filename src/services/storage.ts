@@ -3,6 +3,7 @@ import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppCon
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { awardBulkMeetingPoints } from './bulkMeetingPoints';
+import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 
 // Local cache
 let localMembers: Member[] = [];
@@ -108,7 +109,10 @@ export class BetaStorage {
     setDoc(doc(db, 'auditLogs', entry.id), entry);
   }
   public static getMemberById(id: string): Member | undefined { return localMembers.find(m => m.id === id); }
-  public static getMemberByStudentId(studentId: string): Member | undefined { return localMembers.find(m => (m.studentId || '') === studentId); }
+  public static getMemberByStudentId(studentId: string): Member | undefined {
+    const matches = localMembers.filter(member => (member.studentId || '').trim() === studentId.trim());
+    return matches.length === 1 ? matches[0] : undefined;
+  }
   public static getMemberByEmail(email: string): Member | undefined { return localMembers.find(m => m.email.toLowerCase() === email.toLowerCase()); }
   public static getSubmissions(): Submission[] { return [...localSubmissions]; }
   public static getEvents(): EventItem[] { return [...localEvents]; }
@@ -159,7 +163,9 @@ export class BetaStorage {
     const members = snap.docs.map(d => d.data() as Member);
     const normalizedId = studentId.trim().toLowerCase();
     if (!/^\d{9,10}$/.test(studentId.trim())) return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
-    const member = members.find(m => (m.studentId || '').trim().toLowerCase() === normalizedId);
+    const matchingMembers = members.filter(m => (m.studentId || '').trim().toLowerCase() === normalizedId);
+    if (matchingMembers.length > 1) return { success: false, error: 'This student ID matches multiple profiles. Please ask an officer to correct the roster before signing in.' };
+    const member = matchingMembers[0];
     if (!member) return { success: false, error: 'Student ID not found.' };
     const session: AuthSession = { token: `tok-${Date.now()}`, email: member.email, isOfficer: false, memberId: member.id, name: member.name };
     this.saveSession(session);
@@ -229,7 +235,7 @@ export class BetaStorage {
     const submissionsSnap = await getDocs(collection(db, 'submissions'));
     const memberSubmissions = submissionsSnap.docs
       .map(snapshot => snapshot.data() as Submission)
-      .filter(sub => sub.status === 'Approved' && (sub.studentId ? sub.studentId === member.studentId : sub.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()));
+      .filter(sub => sub.status === 'Approved' && submissionBelongsToMember(sub, member));
     const earnedPoints = memberSubmissions.reduce((sum, sub) => sum + (sub.points || 0), 0);
     const adjustment = Math.round((desiredTotal - earnedPoints) * 10) / 10;
     await setDoc(doc(db, 'members', member.id), {
@@ -240,7 +246,7 @@ export class BetaStorage {
     return { success: true };
   }
 
-  public static async awardBulkMeetingPoint(memberIds: string[], meetingName: string): Promise<{ success: boolean; awarded?: number; error?: string }> {
+  public static async awardBulkMeetingPoint(memberIds: string[], meetingName: string): Promise<{ success: boolean; awarded?: number; skipped?: number; error?: string }> {
     const uniqueMembers = [...new Set(memberIds)]
       .map(memberId => this.getMemberById(memberId))
       .filter((member): member is Member => !!member);
@@ -266,7 +272,7 @@ export class BetaStorage {
     batch.set(doc(db, 'deletedMembers', `${member.id}-${archive.deletedAt}`), archive);
     batch.delete(doc(db, 'members', id));
     localSubmissions
-      .filter(sub => sub.studentId === member.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === member.email.toLowerCase()))
+      .filter(sub => submissionBelongsToMember(sub, member))
       .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
     batch.commit();
     this.log('Member removed', member.name, 'Profile archived and active submissions removed.');
@@ -288,7 +294,7 @@ export class BetaStorage {
     const batch = writeBatch(db);
     batch.delete(doc(db, 'deletedMembers', archiveId));
     localSubmissions
-      .filter(sub => sub.studentId === archive.studentId || (!sub.studentId && sub.studentEmail.toLowerCase() === archive.email.toLowerCase()))
+      .filter(sub => submissionBelongsToMember(sub, archive))
       .forEach(sub => batch.delete(doc(db, 'submissions', sub.id)));
     batch.commit();
     this.log('Member permanently deleted', archive.name, 'Archived profile and remaining submissions removed.');
@@ -452,14 +458,15 @@ export class BetaStorage {
 
   public static recalculateMemberPoints(studentIdOrEmail: string): number {
     const norm = studentIdOrEmail.toLowerCase().trim();
-    const member = localMembers.find(m => (m.studentId || '').toLowerCase().trim() === norm) || localMembers.find(m => m.email.toLowerCase().trim() === norm);
+    const idMatches = localMembers.filter(m => (m.studentId || '').toLowerCase().trim() === norm);
+    const member = idMatches.length > 0
+      ? (idMatches.length === 1 ? idMatches[0] : undefined)
+      : localMembers.find(m => m.email.toLowerCase().trim() === norm);
     if (!member) return 0;
     
     getDocs(collection(db, 'submissions')).then(snap => {
       const allSubs = snap.docs.map(d => d.data() as Submission);
-      const studentSubs = allSubs.filter(s => s.status === 'Approved' && (s.studentId
-        ? s.studentId === member.studentId
-        : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()));
+      const studentSubs = allSubs.filter(s => s.status === 'Approved' && submissionBelongsToMember(s, member));
       const total = studentSubs.reduce((sum, s) => sum + (s.points || 0), 0) + (Number(member.manualPointAdjustment) || 0);
       const rounded = Math.round(total * 10) / 10;
       setDoc(doc(db, 'members', member.id), { totalPoints: rounded }, { merge: true });

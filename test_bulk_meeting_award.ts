@@ -12,6 +12,7 @@ import {
   terminate
 } from 'firebase/firestore';
 import { awardBulkMeetingPoints } from './src/services/bulkMeetingPoints.ts';
+import { submissionBelongsToMember } from './src/utils/submissionBelongsToMember.ts';
 import type { Member } from './src/types/index.ts';
 
 const emulatorAddress = process.env.FIRESTORE_EMULATOR_HOST;
@@ -47,9 +48,32 @@ const secondMember: Member = {
 const meetingName = `Emulator Meeting ${Date.now()}`;
 const meetingKey = meetingName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
 const memberRefs = [doc(database, 'members', firstMember.id), doc(database, 'members', secondMember.id)];
-const auditRef = doc(database, 'auditLogs', `meeting-award-${meetingKey}`);
 const firstReceiptRef = doc(database, 'meetingPointAwards', `${meetingKey}-${encodeURIComponent(firstMember.id)}`);
 const secondReceiptRef = doc(database, 'meetingPointAwards', `${meetingKey}-${encodeURIComponent(secondMember.id)}`);
+const legacyMeetingName = `Legacy Emulator Meeting ${Date.now()}`;
+const legacyMeetingKey = legacyMeetingName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+const legacyAuditRef = doc(database, 'auditLogs', `meeting-award-${legacyMeetingKey}`);
+const legacyReceiptRef = doc(database, 'meetingPointAwards', `${legacyMeetingKey}-${encodeURIComponent(secondMember.id)}`);
+
+const testSubmission = {
+  id: 'submission-test',
+  studentName: firstMember.name,
+  studentId: firstMember.studentId,
+  studentEmail: firstMember.email,
+  category: 'Test Activity',
+  hours: 1,
+  points: 1,
+  date: '2026-10-01',
+  assignedTo: 'Officer',
+  proofUrl: '',
+  status: 'Approved' as const,
+  timestamp: new Date().toISOString()
+};
+
+assert.equal(submissionBelongsToMember(testSubmission, firstMember), true);
+assert.equal(submissionBelongsToMember({ ...testSubmission, studentEmail: secondMember.email }, firstMember), false);
+assert.equal(submissionBelongsToMember({ ...testSubmission, studentId: undefined }, firstMember), true);
+assert.equal(submissionBelongsToMember({ ...testSubmission, studentId: undefined, studentEmail: secondMember.email }, firstMember), false);
 
 async function run(): Promise<void> {
   try {
@@ -59,7 +83,7 @@ async function run(): Promise<void> {
     ]);
 
     const awardResult = await awardBulkMeetingPoints(database, [firstMember, firstMember], meetingName);
-    assert.deepEqual(awardResult, { success: true, awarded: 1 });
+    assert.deepEqual(awardResult, { success: true, awarded: 1, skipped: 0 });
 
     const firstSaved = await getDoc(memberRefs[0]);
     const secondSaved = await getDoc(memberRefs[1]);
@@ -75,21 +99,49 @@ async function run(): Promise<void> {
     assert.equal(firstReceipt.data()?.awardedBy, 'Chapter officer');
     assert.equal((await getDoc(secondReceiptRef)).exists(), false, 'unchecked students must not receive an award record');
 
-    const audit = await getDoc(auditRef);
-    assert.equal(audit.exists(), true);
-    assert.equal(audit.data()?.target, '1 students');
-    assert.doesNotMatch(audit.data()?.details || '', /Test Alpha|Test Beta/);
+    const makeUpResult = await awardBulkMeetingPoints(database, [secondMember], meetingName);
+    assert.deepEqual(makeUpResult, { success: true, awarded: 1, skipped: 0 });
+    assert.equal((await getDoc(memberRefs[0])).data()?.totalPoints, 6, 'a repeated run must not re-award the first student');
+    assert.equal((await getDoc(memberRefs[1])).data()?.totalPoints, 9, 'a missed student should receive their point on retry');
+    assert.equal((await getDoc(memberRefs[1])).data()?.manualPointAdjustment, 2);
+    assert.equal((await getDoc(secondReceiptRef)).exists(), true);
 
     const duplicateResult = await awardBulkMeetingPoints(database, [firstMember, secondMember], meetingName);
-    assert.equal(duplicateResult.success, false);
+    assert.deepEqual(duplicateResult, {
+      success: false,
+      awarded: 0,
+      skipped: 2,
+      error: 'All selected students already received this meeting point.'
+    });
     assert.equal((await getDoc(memberRefs[0])).data()?.totalPoints, 6);
-    assert.equal((await getDoc(memberRefs[1])).data()?.totalPoints, 8);
+    assert.equal((await getDoc(memberRefs[1])).data()?.totalPoints, 9);
+
+    await setDoc(legacyAuditRef, {
+      id: legacyAuditRef.id,
+      action: 'Bulk meeting points awarded',
+      target: '1 students',
+      details: `${legacyMeetingName}: prior award without individual receipts.`,
+      timestamp: new Date().toISOString()
+    });
+    const legacyResult = await awardBulkMeetingPoints(database, [secondMember], legacyMeetingName);
+    assert.equal(legacyResult.success, false, 'legacy meetings without receipts must be blocked to avoid double-awarding');
+    assert.equal((await getDoc(memberRefs[1])).data()?.totalPoints, 9);
+    assert.equal((await getDoc(legacyReceiptRef)).exists(), false);
+
+    const auditDocs = (await getDocs(collection(database, 'auditLogs'))).docs
+      .map(snapshot => snapshot.data())
+      .filter(entry => entry.action === 'Bulk meeting points awarded' && entry.details?.startsWith(`${meetingName}:`));
+    assert.equal(auditDocs.length, 2, 'a make-up batch should create a separate audit entry');
+    auditDocs.forEach(entry => assert.doesNotMatch(entry.details || '', /Test Alpha|Test Beta/));
 
     assert.equal((await getDocs(collection(database, 'submissions'))).size, 0);
     assert.equal((await getDocs(collection(database, 'events'))).size, 0);
-    console.log('Firestore emulator test passed: selected points, personal award receipts, duplicate protection, audit privacy, and no submissions/events.');
+    console.log('Firestore emulator test passed: identity matching, selected awards, make-up batches, duplicate protection, legacy safety, audit privacy, and no submissions/events.');
   } finally {
-    await Promise.all([...memberRefs, auditRef, firstReceiptRef, secondReceiptRef].map(reference => deleteDoc(reference).catch(() => undefined)));
+    const meetingAudits = (await getDocs(collection(database, 'auditLogs'))).docs
+      .filter(snapshot => snapshot.data().details?.startsWith(`${meetingName}:`) || snapshot.id === legacyAuditRef.id)
+      .map(snapshot => snapshot.ref);
+    await Promise.all([...memberRefs, ...meetingAudits, firstReceiptRef, secondReceiptRef, legacyReceiptRef].map(reference => deleteDoc(reference).catch(() => undefined)));
     await terminate(database);
   }
 }

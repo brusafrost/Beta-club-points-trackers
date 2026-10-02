@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Member, Submission, AppConfig, MeetingPointAward } from '../types';
 import { BetaStorage } from '../services/storage';
 import { formatDate } from '../utils/dateFormatter';
+import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { useToast } from '../context/ToastContext';
 import {
   Clock,
@@ -57,10 +58,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const allMembers = BetaStorage.getMembers();
 
   const mySubs = useMemo(() => {
-    return submissions.filter(
-      s => s.studentId ? s.studentId === member.studentId : s.studentEmail.toLowerCase().trim() === member.email.toLowerCase().trim()
-    );
-  }, [submissions, member.email, member.studentId]);
+    return submissions.filter(submission => submissionBelongsToMember(submission, member));
+  }, [submissions, member]);
 
   const myMeetingPointAwards = useMemo(
     () => meetingPointAwards.filter(award => award.memberId === member.id),
