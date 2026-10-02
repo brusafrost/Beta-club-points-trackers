@@ -128,7 +128,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   // Export personal transcript CSV
   const handleExportTranscript = () => {
-    const headers = ['Submission ID', 'Activity Category', 'Service Date', 'Hours Logged', 'Credit Points Earned', 'Status', 'Reviewer', 'My Comment', 'Officer Note'];
+    const headers = ['Record ID', 'Activity / Adjustment', 'Service Date', 'Hours Logged', 'Points', 'Status', 'Reviewer', 'My Comment', 'Officer Note'];
     const rows = mySubs.map(s => [
       s.id,
       `"${s.category.replace(/"/g, '""')}"`,
@@ -140,6 +140,31 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       `"${(s.comments || '').replace(/"/g, '""')}"`,
       `"${(s.officerNotes || '').replace(/"/g, '""')}"`
     ]);
+    rows.push(...myMeetingPointAwards.map(award => [
+      award.id,
+      `"Meeting credit: ${award.meetingName.replace(/"/g, '""')}"`,
+      award.timestamp.slice(0, 10),
+      0,
+      award.points.toFixed(1),
+      'Approved',
+      `"${award.awardedBy.replace(/"/g, '""')}"`,
+      '""',
+      '"Awarded directly to this student"'
+    ]));
+    const otherManualAdjustment = (Number(member.manualPointAdjustment) || 0) - myMeetingPointAwards.reduce((sum, award) => sum + (award.points || 0), 0);
+    if (Math.abs(otherManualAdjustment) > 0.05) {
+      rows.push([
+        'manual-adjustment',
+        'Other manual point adjustment',
+        '',
+        0,
+        otherManualAdjustment.toFixed(1),
+        'Adjusted',
+        '"Chapter officer"',
+        '""',
+        '"Manual point adjustment; not a service submission"'
+      ]);
+    }
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);

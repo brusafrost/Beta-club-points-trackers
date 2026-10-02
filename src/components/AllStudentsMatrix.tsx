@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Member, Submission, EventItem } from '../types';
 import { Search, Download, BarChart3 } from 'lucide-react';
+import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 
 interface Props {
   members: Member[];
@@ -17,32 +18,28 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
 
   // Build map: studentEmail -> { eventName -> points }
   const { displayEvents, rows } = useMemo(() => {
-    const approved = submissions.filter(s => s.status === 'Approved' && !s.category.toLowerCase().startsWith('bonus:'));
-    const bonusTotals: Record<string, number> = {};
-    submissions.filter(s => s.status === 'Approved' && s.category.toLowerCase().startsWith('bonus:')).forEach(s => {
-      const key = s.studentId || s.studentEmail.toLowerCase().trim();
-      bonusTotals[key] = (bonusTotals[key] || 0) + (s.points || 0);
-    });
-    const studentsMap: Record<string, Record<string, number>> = {};
-
-    approved.forEach(s => {
-      const key = s.studentId || s.studentEmail.toLowerCase().trim();
-      if (!studentsMap[key]) studentsMap[key] = {};
-      studentsMap[key][s.category] = (studentsMap[key][s.category] || 0) + (s.points || 0);
-    });
+    const approved = submissions.filter(s => s.status === 'Approved');
+    const eventSubs = approved.filter(s => !s.category.toLowerCase().startsWith('bonus:'));
 
     // Include all events plus any submission-only categories
-    const submissionCats = Array.from(new Set(approved.map(s => s.category)));
+    const submissionCats = Array.from(new Set(eventSubs.map(s => s.category)));
     const extraCats = submissionCats.filter(cat => !events.some(e => e.name === cat));
     const allEvents = [...events.map(e => e.name), ...extraCats];
 
     const rows = members.map(m => {
       const key = m.studentId || m.email.toLowerCase().trim();
-      const map = studentsMap[key] || {};
-      const cells = allEvents.map(ev => ({ event: ev, points: map[ev] || 0 }));
+      const ownApprovedSubs = approved.filter(submission => submissionBelongsToMember(submission, m));
+      const studentEvents = ownApprovedSubs.filter(submission => !submission.category.toLowerCase().startsWith('bonus:'));
+      const eventPoints: Record<string, number> = {};
+      studentEvents.forEach(submission => {
+        eventPoints[submission.category] = (eventPoints[submission.category] || 0) + (submission.points || 0);
+      });
+      const cells = allEvents.map(ev => ({ event: ev, points: eventPoints[ev] || 0 }));
       const eventTotal = cells.reduce((sum, cell) => sum + cell.points, 0);
       const canSeePrivatePoints = isOfficer || key === viewerMemberId;
-      const bonus = canSeePrivatePoints ? bonusTotals[key] || 0 : 0;
+      const bonus = canSeePrivatePoints
+        ? ownApprovedSubs.filter(submission => submission.category.toLowerCase().startsWith('bonus:')).reduce((sum, submission) => sum + (submission.points || 0), 0)
+        : 0;
       const adjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
       return { member: m, cells, eventTotal, bonus, adjustment, total: eventTotal + bonus + adjustment };
     });

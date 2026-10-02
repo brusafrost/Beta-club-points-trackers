@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, Submission, EventItem, AppConfig } from '../types';
 import { useToast } from '../context/ToastContext';
+import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { Table, Search, Filter, Download, ArrowUpDown, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 
 interface PointsTrackerMatrixProps {
@@ -33,24 +34,10 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
 
   // Build matrix data of student email -> event -> approved points
   const { displayEvents, filteredRows } = useMemo(() => {
-    const approvedSubs = submissions.filter(s => s.status === 'Approved' && !s.category.toLowerCase().startsWith('bonus:'));
-    const bonusTotals: Record<string, number> = {};
-    submissions.filter(s => s.status === 'Approved' && s.category.toLowerCase().startsWith('bonus:')).forEach(s => {
-      const key = s.studentId || s.studentEmail.toLowerCase().trim();
-      bonusTotals[key] = (bonusTotals[key] || 0) + (s.points || 0);
-    });
-    const map: Record<string, Record<string, number>> = {};
-
-    approvedSubs.forEach(s => {
-      const key = s.studentId || s.studentEmail.toLowerCase().trim();
-      if (!map[key]) {
-        map[key] = {};
-      }
-      map[key][s.category] = (map[key][s.category] || 0) + (s.points || 0);
-    });
-
-    const approvedCategories = new Set<string>(approvedSubs.map(s => s.category));
-    const missingFromEvents = Array.from(approvedCategories).filter(cat => !events.some(e => e.name === cat));
+    const approvedSubs = submissions.filter(s => s.status === 'Approved');
+    const eventSubs = approvedSubs.filter(s => !s.category.toLowerCase().startsWith('bonus:'));
+    const eventCategories = new Set(eventSubs.map(s => s.category));
+    const missingFromEvents = Array.from(eventCategories).filter(cat => !events.some(e => e.name === cat));
     const extraEvents = missingFromEvents.map((cat, idx) => ({ id: `custom-${idx}-${cat.replace(/[^a-z0-9]+/ig,'-')}`, name: cat, type: 'NONBETA' as const, description: 'Submission-only category' }));
 
     const activeEvents = eventFilter === 'ALL'
@@ -62,10 +49,18 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
 
     let rows = members.map(m => {
       const key = m.studentId || m.email.toLowerCase().trim();
-      const studentEvents = map[key] || {};
+      const ownApprovedSubs = approvedSubs.filter(submission => submissionBelongsToMember(submission, m));
+      const studentEvents: Record<string, number> = {};
+      ownApprovedSubs
+        .filter(submission => !submission.category.toLowerCase().startsWith('bonus:'))
+        .forEach(submission => {
+          studentEvents[submission.category] = (studentEvents[submission.category] || 0) + (submission.points || 0);
+        });
       const eventPointsTotal = Object.values(studentEvents).reduce((sum, points) => sum + points, 0);
       const canSeePrivatePoints = isOfficer || key === viewerMemberId;
-      const bonusPoints = canSeePrivatePoints ? bonusTotals[key] || 0 : 0;
+      const bonusPoints = canSeePrivatePoints
+        ? ownApprovedSubs.filter(submission => submission.category.toLowerCase().startsWith('bonus:')).reduce((sum, submission) => sum + (submission.points || 0), 0)
+        : 0;
       const manualAdjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
       return {
         ...m,

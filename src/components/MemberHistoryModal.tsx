@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Member, Submission, AppConfig } from '../types';
+import { Member, Submission, AppConfig, MeetingPointAward } from '../types';
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { useToast } from '../context/ToastContext';
@@ -8,6 +8,7 @@ import { X, Calendar, Clock, Award, CheckCircle2, AlertCircle, Clock3, Download,
 interface MemberHistoryModalProps {
   member: Member | null;
   submissions: Submission[];
+  meetingPointAwards: MeetingPointAward[];
   config: AppConfig;
   isOpen: boolean;
   onClose: () => void;
@@ -17,6 +18,7 @@ interface MemberHistoryModalProps {
 export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
   member,
   submissions,
+  meetingPointAwards,
   config,
   isOpen,
   onClose,
@@ -33,6 +35,13 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
       .filter(submission => submissionBelongsToMember(submission, member))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [submissions, member]);
+
+  const memberMeetingAwards = useMemo(
+    () => meetingPointAwards.filter(award => award.memberId === member.id),
+    [meetingPointAwards, member.id]
+  );
+  const meetingAwardPoints = memberMeetingAwards.reduce((sum, award) => sum + (award.points || 0), 0);
+  const otherManualAdjustment = (Number(member.manualPointAdjustment) || 0) - meetingAwardPoints;
 
   const stats = useMemo(() => {
     let approvedPts = 0;
@@ -78,7 +87,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
   const isCapped = (member.totalPoints || 0) >= cap;
 
   const exportStudentHistoryCSV = () => {
-    const headers = ['Submission ID', 'Service Date', 'Category/Event', 'Hours', 'Points', 'Status', 'Reviewer', 'Student Comments', 'Officer Notes', 'Timestamp'];
+    const headers = ['Record ID', 'Service Date', 'Activity / Adjustment', 'Hours', 'Points', 'Status', 'Reviewer', 'Student Comments', 'Officer Notes', 'Timestamp'];
     const rows = memberSubs.map(s => [
       s.id,
       s.date,
@@ -91,10 +100,36 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
       `"${(s.officerNotes || '').replace(/"/g, '""')}"`,
       s.timestamp
     ]);
+    rows.push(...memberMeetingAwards.map(award => [
+      award.id,
+      award.timestamp.slice(0, 10),
+      `"Meeting credit: ${award.meetingName.replace(/"/g, '""')}"`,
+      0,
+      award.points.toFixed(1),
+      'Approved',
+      `"${award.awardedBy.replace(/"/g, '""')}"`,
+      '""',
+      '"Awarded directly to this student"',
+      award.timestamp
+    ]));
+    if (Math.abs(otherManualAdjustment) > 0.05) {
+      rows.push([
+        'manual-adjustment',
+        '',
+        'Other manual point adjustment',
+        0,
+        otherManualAdjustment.toFixed(1),
+        'Adjusted',
+        '"Chapter officer"',
+        '""',
+        '"Manual point adjustment; not a service submission"',
+        ''
+      ]);
+    }
 
     const csvContent = [
       `"Beta Club Member Service History - ${member.name} (${member.email})"`,
-      `"Student ID: ${member.studentId || 'N/A'} | Grade: ${member.gradeLevel || 11}th | Total Approved Points: ${(member.totalPoints || 0).toFixed(1)} / ${cap}"`,
+      `"Student ID: ${member.studentId || 'N/A'} | Grade: ${member.gradeLevel || 11}th | Total Points: ${(member.totalPoints || 0).toFixed(1)} / ${cap} | Service submissions: ${stats.approvedPts.toFixed(1)} | Meeting credits: ${meetingAwardPoints.toFixed(1)} | Other manual adjustment: ${otherManualAdjustment.toFixed(1)}"`,
       '',
       headers.join(','),
       ...rows.map(r => r.join(','))
@@ -174,7 +209,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
           <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-3 font-mono">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-zinc-500 text-xs">Total Approved Points</span>
+                <span className="text-zinc-500 text-xs">Total Points</span>
                 <div className="text-xl font-bold text-zinc-900 mt-0.5">
                   {(member.totalPoints || 0).toFixed(1)} <span className="text-xs font-normal text-zinc-400">/ {cap} pts</span>
                 </div>
@@ -193,6 +228,12 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
                 style={{ width: `${progressPercent}%` }}
                 className="h-full bg-zinc-900 rounded-full transition-all"
               />
+            </div>
+
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-600">
+              <span>Approved submission points: <strong>{stats.approvedPts.toFixed(1)}</strong></span>
+              <span>Meeting credits: <strong>{meetingAwardPoints.toFixed(1)}</strong></span>
+              <span>Other manual adjustment: <strong>{otherManualAdjustment.toFixed(1)}</strong></span>
             </div>
 
             {/* Breakdown stats */}
@@ -215,6 +256,23 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
               </div>
             </div>
           </div>
+
+          {memberMeetingAwards.length > 0 && (
+            <section className="space-y-3">
+              <h3 className="font-bold text-sm text-zinc-900">Individual Meeting Credits ({memberMeetingAwards.length})</h3>
+              <div className="space-y-2">
+                {memberMeetingAwards.map(award => (
+                  <div key={award.id} className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-zinc-900">{award.meetingName}</p>
+                      <p className="text-zinc-600">Awarded directly by a chapter officer on {formatDate(award.timestamp)}.</p>
+                    </div>
+                    <strong className="shrink-0 text-emerald-800">+{award.points.toFixed(1)} pts</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Submission History Timeline */}
           <div className="space-y-3">

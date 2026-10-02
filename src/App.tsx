@@ -172,6 +172,7 @@ export default function App() {
             <OfficerDashboard
               members={members}
               submissions={submissions}
+              meetingPointAwards={meetingPointAwards}
               events={events}
               officers={officers}
               config={config}
@@ -215,6 +216,7 @@ export default function App() {
         <MemberHistoryModal
           member={selectedHistoryMember}
           submissions={submissions}
+          meetingPointAwards={meetingPointAwards}
           config={config}
           isOpen={Boolean(selectedHistoryMember)}
           onClose={() => setSelectedHistoryMember(null)}

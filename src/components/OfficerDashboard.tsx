@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Member, Submission, EventItem, Officer, AppConfig } from '../types';
+import { Member, Submission, EventItem, Officer, AppConfig, MeetingPointAward } from '../types';
 import { BetaStorage } from '../services/storage';
 import { formatDate, formatDateTime, formatFriendlyTimestamp } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
@@ -43,6 +43,7 @@ import { MemberRoster } from './MemberRoster';
 interface OfficerDashboardProps {
   members: Member[];
   submissions: Submission[];
+  meetingPointAwards: MeetingPointAward[];
   events: EventItem[];
   officers: Officer[];
   config: AppConfig;
@@ -54,6 +55,7 @@ interface OfficerDashboardProps {
 export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   members,
   submissions,
+  meetingPointAwards,
   events,
   officers,
   config,
@@ -204,6 +206,19 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
     return list;
   }, [submissions, selectedStudent, historyStatusFilter]);
+  const selectedStudentApprovedPoints = submissions
+    .filter(submission => submission.status === 'Approved' && selectedStudent && submissionBelongsToMember(submission, selectedStudent))
+    .reduce((sum, submission) => sum + (submission.points || 0), 0);
+  const selectedStudentMeetingAwards = useMemo(
+    () => meetingPointAwards.filter(award => award.memberId === selectedStudent?.id),
+    [meetingPointAwards, selectedStudent?.id]
+  );
+  const selectedStudentMeetingPoints = selectedStudentMeetingAwards.reduce((sum, award) => sum + (award.points || 0), 0);
+  const selectedStudentOtherAdjustment = (Number(selectedStudent?.manualPointAdjustment) || 0) - selectedStudentMeetingPoints;
+  const unmatchedApprovedSubmissions = useMemo(
+    () => submissions.filter(submission => submission.status === 'Approved' && !members.some(member => submissionBelongsToMember(submission, member))),
+    [submissions, members]
+  );
 
   // Filtered members list for Student Selector in History Tab
   const filteredStudentsList = useMemo(() => {
@@ -481,7 +496,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
   const handleDownloadStudentTranscript = (student: Member) => {
     const studentSubs = submissions.filter(submission => submissionBelongsToMember(submission, student));
-    const headers = ['Submission ID', 'Activity Category', 'Service Date', 'Hours Logged', 'Credit Points Earned', 'Status', 'Reviewer', 'Student Comment', 'Officer Notes'];
+    const studentAwards = meetingPointAwards.filter(award => award.memberId === student.id);
+    const headers = ['Record ID', 'Activity / Adjustment', 'Service Date', 'Hours Logged', 'Points', 'Status', 'Reviewer', 'Student Comment', 'Officer Notes'];
     const rows = studentSubs.map(s => [
       s.id,
       `"${s.category.replace(/"/g, '""')}"`,
@@ -493,6 +509,31 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       `"${(s.comments || '').replace(/"/g, '""')}"`,
       `"${(s.officerNotes || '').replace(/"/g, '""')}"`
     ]);
+    rows.push(...studentAwards.map(award => [
+      award.id,
+      `"Meeting credit: ${award.meetingName.replace(/"/g, '""')}"`,
+      award.timestamp.slice(0, 10),
+      0,
+      award.points.toFixed(1),
+      'Approved',
+      `"${award.awardedBy.replace(/"/g, '""')}"`,
+      '""',
+      '"Awarded directly to this student"'
+    ]));
+    const otherManualAdjustment = (Number(student.manualPointAdjustment) || 0) - studentAwards.reduce((sum, award) => sum + (award.points || 0), 0);
+    if (Math.abs(otherManualAdjustment) > 0.05) {
+      rows.push([
+        'manual-adjustment',
+        'Other manual point adjustment',
+        '',
+        0,
+        otherManualAdjustment.toFixed(1),
+        'Adjusted',
+        '"Chapter officer"',
+        '""',
+        '"Manual point adjustment; not a service submission"'
+      ]);
+    }
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -1104,6 +1145,22 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       {/* TAB 2: STUDENT HISTORY & TRANSCRIPTS */}
       {activeTab === 'history' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {unmatchedApprovedSubmissions.length > 0 && (
+            <section role="alert" className="lg:col-span-12 space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <div>
+                <h2 className="text-sm font-bold text-amber-950">Approved credits not linked to a roster profile ({unmatchedApprovedSubmissions.length})</h2>
+                <p className="mt-1 text-xs text-amber-900">These points are excluded from student totals until the submission ID or email matches a roster profile. Review the record before assigning credit; no student has been credited automatically.</p>
+              </div>
+              <ul className="divide-y divide-amber-200 text-xs">
+                {unmatchedApprovedSubmissions.map(submission => (
+                  <li key={submission.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <span className="font-semibold text-amber-950">{submission.studentName || 'Name not provided'} · {submission.category}</span>
+                    <span className="font-mono text-amber-900">ID: {submission.studentId || 'missing'} · Email: {submission.studentEmail || 'missing'} · {submission.points.toFixed(1)} pts · {formatDate(submission.date)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           
           {/* Left Column: Student Selector Sidebar (4 Cols) */}
           <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-zinc-200 shadow-xs space-y-4">
@@ -1230,6 +1287,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                       {(selectedStudent.totalPoints || 0).toFixed(1)} / {cap} Points ({Math.min(100, Math.round(((selectedStudent.totalPoints || 0) / cap) * 100))}%)
                     </span>
                   </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-600">
+                    <span>Approved submissions: <strong>{selectedStudentApprovedPoints.toFixed(1)}</strong></span>
+                    <span>Meeting credits: <strong>{selectedStudentMeetingPoints.toFixed(1)}</strong></span>
+                    <span>Other manual adjustment: <strong>{selectedStudentOtherAdjustment.toFixed(1)}</strong></span>
+                  </div>
                   <div className="h-2.5 w-full bg-zinc-200 rounded-full overflow-hidden">
                     <div
                       style={{ width: `${Math.min(100, ((selectedStudent.totalPoints || 0) / cap) * 100)}%` }}
@@ -1237,6 +1299,21 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                     />
                   </div>
                 </div>
+
+                {selectedStudentMeetingAwards.length > 0 && (
+                  <section className="space-y-2">
+                    <h3 className="font-bold text-zinc-900 text-xs font-mono uppercase tracking-wider">Individual Meeting Credits ({selectedStudentMeetingAwards.length})</h3>
+                    {selectedStudentMeetingAwards.map(award => (
+                      <div key={award.id} className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-xs">
+                        <div>
+                          <p className="font-semibold text-zinc-900">{award.meetingName}</p>
+                          <p className="text-zinc-600">Awarded directly by a chapter officer on {formatDate(award.timestamp)}.</p>
+                        </div>
+                        <strong className="shrink-0 text-emerald-800">+{award.points.toFixed(1)} pts</strong>
+                      </div>
+                    ))}
+                  </section>
+                )}
 
                 {/* Submissions List */}
                 <div className="space-y-3">
