@@ -70,7 +70,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Student History Tab state
-  const [selectedStudentEmail, setSelectedStudentEmail] = useState<string>(members[0]?.email || '');
+  const [selectedStudentMemberId, setSelectedStudentMemberId] = useState<string>(members[0]?.id || '');
   const [studentSearchQuery, setStudentSearchQuery] = useState<string>('');
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [editMemFirstName, setEditMemFirstName] = useState("");
@@ -189,11 +189,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
   // Selected Student for the History Tab
   const selectedStudent = useMemo(() => {
-    if (!selectedStudentEmail && members.length > 0) {
+    if (!selectedStudentMemberId && members.length > 0) {
       return members[0];
     }
-    return members.find(m => m.email.toLowerCase().trim() === selectedStudentEmail.toLowerCase().trim()) || members[0];
-  }, [members, selectedStudentEmail]);
+    return members.find(member => member.id === selectedStudentMemberId) || members[0];
+  }, [members, selectedStudentMemberId]);
 
   // Submissions for the selected student in History Tab
   const selectedStudentSubs = useMemo(() => {
@@ -935,9 +935,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                             onClick={() => {
                               if (member && onViewMemberHistory) {
                                 onViewMemberHistory(member);
-                              } else {
-                                setSelectedStudentEmail(sub.studentEmail);
+                              } else if (member) {
+                                setSelectedStudentMemberId(member.id);
                                 setActiveTab('history');
+                              } else {
+                                showToast({ title: 'Student Profile Not Found', message: 'This submission could not be matched to one roster profile.', type: 'error' });
                               }
                             }}
                             className="font-bold text-base text-zinc-900 hover:text-zinc-600 hover:underline flex items-center gap-1.5"
@@ -1129,7 +1131,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             {/* Member List */}
             <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
               {filteredStudentsList.map((m) => {
-                const isSelected = selectedStudent?.email.toLowerCase().trim() === m.email.toLowerCase().trim();
+                const isSelected = selectedStudent?.id === m.id;
                 const memSubs = submissions.filter(submission => submissionBelongsToMember(submission, m));
                 const pendingCount = memSubs.filter(s => s.status === 'Pending').length;
 
@@ -1137,7 +1139,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setSelectedStudentEmail(m.email)}
+                    onClick={() => setSelectedStudentMemberId(m.id)}
                     className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between text-xs ${
                       isSelected
                         ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
