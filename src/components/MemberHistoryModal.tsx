@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { Member, Submission, AppConfig, MeetingPointAward } from '../types';
+import { Member, Submission, AppConfig, MeetingPointAward, EventItem } from '../types';
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
+import { resolveServiceActivityType } from '../utils/serviceActivityType';
 import { useToast } from '../context/ToastContext';
 import { X, Calendar, Clock, Award, CheckCircle2, AlertCircle, Clock3, Download, ExternalLink, User, ShieldCheck } from 'lucide-react';
 
@@ -9,6 +10,7 @@ interface MemberHistoryModalProps {
   member: Member | null;
   submissions: Submission[];
   meetingPointAwards: MeetingPointAward[];
+  events: EventItem[];
   config: AppConfig;
   isOpen: boolean;
   onClose: () => void;
@@ -19,6 +21,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
   member,
   submissions,
   meetingPointAwards,
+  events,
   config,
   isOpen,
   onClose,
@@ -49,8 +52,9 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
     let pendingPts = 0;
     let pendingHrs = 0;
     let rejectedCount = 0;
-    let betaPoints = 0;
-    let nonBetaPoints = 0;
+    let betaHours = 0;
+    let nonBetaHours = 0;
+    let unclassifiedHours = 0;
     let bonusPoints = 0;
 
     memberSubs.forEach(s => {
@@ -60,7 +64,10 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
         if (s.category.startsWith('Bonus:')) {
           bonusPoints += s.points || 0;
         } else {
-          betaPoints += s.points || 0;
+          const activityType = resolveServiceActivityType(s, events);
+          if (activityType === 'BETA') betaHours += s.hours || 0;
+          else if (activityType === 'NONBETA') nonBetaHours += s.hours || 0;
+          else unclassifiedHours += s.hours || 0;
         }
       } else if (s.status === 'Pending') {
         pendingPts += s.points || 0;
@@ -76,12 +83,13 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
       pendingPts,
       pendingHrs,
       rejectedCount,
-      betaPoints,
-      nonBetaPoints,
+      betaHours,
+      nonBetaHours,
+      unclassifiedHours,
       bonusPoints,
       totalEntries: memberSubs.length
     };
-  }, [memberSubs]);
+  }, [memberSubs, events]);
 
   const progressPercent = Math.min(100, Math.round(((member.totalPoints || 0) / cap) * 100));
   const isCapped = (member.totalPoints || 0) >= cap;
@@ -129,7 +137,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
 
     const csvContent = [
       `"Beta Club Member Service History - ${member.name} (${member.email})"`,
-      `"Student ID: ${member.studentId || 'N/A'} | Grade: ${member.gradeLevel || 11}th | Total Points: ${(member.totalPoints || 0).toFixed(1)} / ${cap} | Service submissions: ${stats.approvedPts.toFixed(1)} | Meeting credits: ${meetingAwardPoints.toFixed(1)} | Other manual adjustment: ${otherManualAdjustment.toFixed(1)}"`,
+      `"Student ID: ${member.studentId || 'N/A'} | Grade: ${member.gradeLevel || 11}th | Total Points: ${(member.totalPoints || 0).toFixed(1)} / ${cap} | Beta hours: ${stats.betaHours.toFixed(1)} / ${config.betaHoursTarget ?? 5} | Non-Beta hours: ${stats.nonBetaHours.toFixed(1)} / ${config.nonBetaHoursTarget ?? 35} | Unclassified hours: ${stats.unclassifiedHours.toFixed(1)} | Service points: ${stats.approvedPts.toFixed(1)} | Meeting credits: ${meetingAwardPoints.toFixed(1)} | Other adjustment: ${otherManualAdjustment.toFixed(1)}"`,
       '',
       headers.join(','),
       ...rows.map(r => r.join(','))
@@ -237,10 +245,18 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
             </div>
 
             {/* Breakdown stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-center">
               <div className="p-2 bg-white rounded-lg border border-zinc-200">
-                <span className="text-zinc-400 block text-[10px]">Approved Hours</span>
-                <strong className="text-zinc-900 text-xs">{stats.approvedHrs.toFixed(1)} hrs</strong>
+                <span className="text-zinc-400 block text-[10px]">Beta-specific</span>
+                <strong className="text-zinc-900 text-xs">{stats.betaHours.toFixed(1)} / {config.betaHoursTarget ?? 5} hrs</strong>
+              </div>
+              <div className="p-2 bg-white rounded-lg border border-zinc-200">
+                <span className="text-zinc-400 block text-[10px]">Non-Beta</span>
+                <strong className="text-zinc-900 text-xs">{stats.nonBetaHours.toFixed(1)} / {config.nonBetaHoursTarget ?? 35} hrs</strong>
+              </div>
+              <div className="p-2 bg-white rounded-lg border border-amber-200">
+                <span className="text-zinc-400 block text-[10px]">Unclassified Hours</span>
+                <strong className="text-zinc-900 text-xs">{stats.unclassifiedHours.toFixed(1)} hrs</strong>
               </div>
               <div className="p-2 bg-white rounded-lg border border-zinc-200">
                 <span className="text-zinc-400 block text-[10px]">Total Submissions</span>

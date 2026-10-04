@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, Submission, EventItem, AppConfig } from '../types';
 import { BarChart3, TrendingUp, Users, Calendar, Award, CheckCircle2, ChevronRight, Filter } from 'lucide-react';
+import { resolveServiceActivityType } from '../utils/serviceActivityType';
 
 interface DeepDiveChartsProps {
   members: Member[];
@@ -86,37 +87,41 @@ export const DeepDiveCharts: React.FC<DeepDiveChartsProps> = ({
 
   // 3. Event Category Breakdown
   const categoryStats = useMemo(() => {
-    const map: Record<string, { name: string; hours: number; points: number; submissions: number; isBeta: boolean }> = {};
+    const map: Record<string, { key: string; name: string; hours: number; points: number; submissions: number; activityType: 'BETA' | 'NONBETA' | null }> = {};
 
     approvedSubs.forEach(s => {
       const cat = s.category || 'General Service';
-      if (!map[cat]) {
-        const evt = events.find(e => e.name === cat);
-        map[cat] = {
+      const activityType = resolveServiceActivityType(s, events);
+      const key = `${cat}\u0000${activityType || 'UNCLASSIFIED'}`;
+      if (!map[key]) {
+        map[key] = {
+          key,
           name: cat,
           hours: 0,
           points: 0,
           submissions: 0,
-          isBeta: evt ? evt.type === 'BETA' : true
+          activityType
         };
       }
-      map[cat].hours += s.hours || 0;
-      map[cat].points += s.points || 0;
-      map[cat].submissions += 1;
+      map[key].hours += s.hours || 0;
+      map[key].points += s.points || 0;
+      map[key].submissions += 1;
     });
 
     const list = Object.values(map).sort((a, b) => b.points - a.points);
-    const totalPoints = list.reduce((sum, item) => sum + item.points, 0) || 1;
-    const totalBetaPoints = list.filter(i => i.isBeta).reduce((sum, item) => sum + item.points, 0);
-    const totalNonBetaPoints = totalPoints - totalBetaPoints;
+    const totalBetaHours = list.filter(item => item.activityType === 'BETA').reduce((sum, item) => sum + item.hours, 0);
+    const totalNonBetaHours = list.filter(item => item.activityType === 'NONBETA').reduce((sum, item) => sum + item.hours, 0);
+    const totalUnclassifiedHours = list.filter(item => item.activityType === null).reduce((sum, item) => sum + item.hours, 0);
+    const totalHours = totalBetaHours + totalNonBetaHours + totalUnclassifiedHours;
 
     return {
       list,
-      totalPoints,
-      totalBetaPoints,
-      totalNonBetaPoints,
-      betaPct: Math.round((totalBetaPoints / totalPoints) * 100),
-      nonBetaPct: Math.round((totalNonBetaPoints / totalPoints) * 100)
+      totalBetaHours,
+      totalNonBetaHours,
+      totalUnclassifiedHours,
+      betaPct: totalHours ? totalBetaHours / totalHours * 100 : 0,
+      nonBetaPct: totalHours ? totalNonBetaHours / totalHours * 100 : 0,
+      unclassifiedPct: totalHours ? totalUnclassifiedHours / totalHours * 100 : 0
     };
   }, [approvedSubs, events]);
 
@@ -423,31 +428,39 @@ export const DeepDiveCharts: React.FC<DeepDiveChartsProps> = ({
           {/* Ratio Bar */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs font-mono">
-              <span className="text-zinc-800 font-semibold">Beta Events: {categoryStats.betaPct}%</span>
-              <span className="text-zinc-500">Non-Beta: {categoryStats.nonBetaPct}%</span>
+              <span className="text-zinc-800 font-semibold">Beta-specific: {categoryStats.totalBetaHours.toFixed(1)} hrs ({categoryStats.betaPct.toFixed(0)}%)</span>
+              <span className="text-zinc-500">Non-Beta: {categoryStats.totalNonBetaHours.toFixed(1)} hrs ({categoryStats.nonBetaPct.toFixed(0)}%)</span>
+              <span className="text-amber-700">Unclassified: {categoryStats.totalUnclassifiedHours.toFixed(1)} hrs ({categoryStats.unclassifiedPct.toFixed(0)}%)</span>
             </div>
             <div className="h-3 w-full bg-zinc-200 rounded-full flex overflow-hidden">
               <div
                 style={{ width: `${categoryStats.betaPct}%` }}
                 className="h-full bg-zinc-900"
-                title={`Beta Events: ${categoryStats.totalBetaPoints.toFixed(1)} pts`}
+                title={`Beta-specific: ${categoryStats.totalBetaHours.toFixed(1)} approved hours`}
               />
               <div
                 style={{ width: `${categoryStats.nonBetaPct}%` }}
                 className="h-full bg-zinc-400"
-                title={`Non-Beta Events: ${categoryStats.totalNonBetaPoints.toFixed(1)} pts`}
+                title={`Non-Beta: ${categoryStats.totalNonBetaHours.toFixed(1)} approved hours`}
               />
+              {categoryStats.totalUnclassifiedHours > 0 && (
+                <div
+                  style={{ width: `${categoryStats.unclassifiedPct}%` }}
+                  className="h-full bg-amber-500"
+                  title={`Unclassified: ${categoryStats.totalUnclassifiedHours.toFixed(1)} approved hours; excluded from Beta/Non-Beta allocation`}
+                />
+              )}
             </div>
           </div>
 
           {/* Top Event Rows */}
           <div className="space-y-2 pt-2 max-h-52 overflow-y-auto pr-1 text-xs">
             {categoryStats.list.slice(0, 5).map(cat => (
-              <div key={cat.name} className="p-2.5 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between">
+              <div key={cat.key} className="p-2.5 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between">
                 <div className="truncate pr-2">
                   <div className="font-semibold text-zinc-900 truncate">{cat.name}</div>
                   <div className="text-[11px] text-zinc-500 font-mono">
-                    {cat.submissions} submissions &bull; {cat.hours} hrs
+                    {cat.submissions} submissions &bull; {cat.hours} hrs &bull; {cat.activityType === 'BETA' ? 'Beta-specific' : cat.activityType === 'NONBETA' ? 'Non-Beta' : 'Unclassified'}
                   </div>
                 </div>
                 <span className="px-2 py-1 bg-white border border-zinc-200 rounded-md font-mono font-bold text-zinc-900 shrink-0">

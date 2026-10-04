@@ -22,7 +22,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
   onSubmitSuccess
 }) => {
   const { showToast } = useToast();
-  const [category, setCategory] = useState<string>(events[0]?.name || 'General Community Service');
+  const [category, setCategory] = useState<string>(events[0]?.name || 'OTHER');
   const [customCategory, setCustomCategory] = useState<string>('');
   const [hours, setHours] = useState<string>('2.0');
   const [date, setDate] = useState<string>(getTodayDateString());
@@ -86,7 +86,6 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
       showToast({ title: 'Validation Error', message: 'Please specify the service category.', type: 'error' });
       return;
     }
-
     setIsSubmitting(true);
 
     try {
@@ -142,7 +141,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
             <span>Log Service Hours & Points</span>
           </h2>
           <p className="text-xs text-zinc-500 font-mono mt-0.5">
-            Submit service hours with photo slip or coordinator verification for officer approval
+            Submit service hours for officer review. Officers assign approved hours to the Beta-specific or Non-Beta requirement.
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { Member, Submission, EventItem, Officer, AppConfig, MeetingPointAward } 
 import { BetaStorage } from '../services/storage';
 import { formatDate, formatDateTime, formatFriendlyTimestamp } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
+import { resolveServiceActivityType } from '../utils/serviceActivityType';
 import { ProofImageStore } from '../services/imageStore';
 import { useToast } from '../context/ToastContext';
 import {
@@ -89,6 +90,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [reviewSub, setReviewSub] = useState<Submission | null>(null);
   const [customPts, setCustomPts] = useState<string>('');
   const [reviewNote, setReviewNote] = useState<string>('');
+  const [reviewActivityType, setReviewActivityType] = useState<'BETA' | 'NONBETA' | ''>('');
 
   // Event creation
   const [newEventName, setNewEventName] = useState<string>('');
@@ -113,6 +115,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   // Settings
   const [editCap, setEditCap] = useState<string>(String(config.pointCap || 40));
   const [editRate, setEditRate] = useState<string>(String(config.hoursRate || 1.0));
+  const [editBetaHoursTarget, setEditBetaHoursTarget] = useState<string>(String(config.betaHoursTarget ?? 5));
+  const [editNonBetaHoursTarget, setEditNonBetaHoursTarget] = useState<string>(String(config.nonBetaHoursTarget ?? 35));
   const [editCode, setEditCode] = useState<string>(config.officerCode || 'beta4216');
   const [editClubName, setEditClubName] = useState<string>(config.clubName || 'National Beta Club');
   const [editSchoolName, setEditSchoolName] = useState<string>(config.schoolName || 'Westview High School');
@@ -173,6 +177,20 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     () => meetingPointPreview.matched.filter(member => !excludedMeetingPointMemberIds.has(member.id)),
     [meetingPointPreview, excludedMeetingPointMemberIds]
   );
+  const unlistedSubmissionCategories = useMemo(() => {
+    const officialCategories = new Set(events.map(event => event.name.trim().toLowerCase()));
+    const categories = new Map<string, { name: string; submissions: number; approvedHours: number }>();
+    submissions.forEach(submission => {
+      const name = submission.category.trim();
+      const key = name.toLowerCase();
+      if (!key || officialCategories.has(key)) return;
+      const entry = categories.get(key) || { name, submissions: 0, approvedHours: 0 };
+      entry.submissions++;
+      if (submission.status === 'Approved') entry.approvedHours += submission.hours || 0;
+      categories.set(key, entry);
+    });
+    return [...categories.values()].sort((a, b) => b.submissions - a.submissions || a.name.localeCompare(b.name));
+  }, [events, submissions]);
 
   // Derived datasets
   const pendingSubs = useMemo(() => submissions.filter(s => s.status === 'Pending'), [submissions]);
@@ -265,16 +283,15 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   }, [submissions, inboxFilter, searchQuery, pendingSubs, commentSubs, activeApprovedSubs, archivedSubs]);
 
   // Actions
+  const openReviewModal = (submission: Submission) => {
+    setReviewSub(submission);
+    setCustomPts(String(submission.points));
+    setReviewNote(submission.officerNotes || '');
+    setReviewActivityType(resolveServiceActivityType(submission, events) || '');
+  };
+
   const handleQuickApprove = (sub: Submission) => {
-    const res = BetaStorage.approveSubmission(sub.id);
-    if (res.success) {
-      showToast({
-        title: 'Submission Approved',
-        message: `Approved ${sub.category} (+${res.actualPoints.toFixed(1)} pts) for ${sub.studentName}.${res.capMsg || ''}`,
-        type: 'success'
-      });
-      onRefresh();
-    }
+    openReviewModal(sub);
   };
 
   const handleEditMemberSave = async (e: React.FormEvent) => {
@@ -324,8 +341,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     if (res.success) {
       showToast({
         title: 'Batch Approval Complete',
-        message: `Approved all ${res.count} pending submissions. Member points calculated and capped at ${config.pointCap || 40}.`,
-        type: 'success'
+        message: `Approved ${res.count} classified submissions${res.skipped ? `; ${res.skipped} unclassified submissions remain pending for Beta/Non-Beta selection` : ''}. Member points are capped at ${config.pointCap || 40}.`,
+        type: res.skipped ? 'warning' : 'success'
       });
       onRefresh();
     }
@@ -374,7 +391,12 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     if (!reviewSub) return;
     const pts = parseFloat(customPts);
     const validPts = isNaN(pts) ? reviewSub.points : pts;
-    const res = BetaStorage.approveSubmission(reviewSub.id, validPts, reviewNote);
+    const activityType = reviewActivityType || resolveServiceActivityType(reviewSub, events);
+    if (reviewSub.hours > 0 && !activityType) {
+      showToast({ title: 'Service Type Required', message: 'Choose whether these hours count as Beta-specific or Non-Beta before approving.', type: 'error' });
+      return;
+    }
+    const res = BetaStorage.approveSubmission(reviewSub.id, validPts, reviewNote, activityType || undefined);
     if (res.success) {
       showToast({
         title: 'Submission Approved',
@@ -482,6 +504,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     BetaStorage.updateConfig({
       pointCap: Number(editCap) || 40,
       hoursRate: Number(editRate) || 1.0,
+      betaHoursTarget: Math.max(0, Number(editBetaHoursTarget) || 0),
+      nonBetaHoursTarget: Math.max(0, Number(editNonBetaHoursTarget) || 0),
       officerCode: editCode.trim() || 'beta4216',
       clubName: editClubName.trim() || 'National Beta Club',
       schoolName: editSchoolName.trim() || 'Westview High School'
@@ -491,6 +515,17 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       message: 'Chapter point cap and security settings successfully updated.',
       type: 'success'
     });
+    onRefresh();
+  };
+
+  const promoteSubmissionCategory = (name: string, type: 'BETA' | 'NONBETA') => {
+    const normalizedName = name.trim().toLowerCase();
+    if (events.some(event => event.name.trim().toLowerCase() === normalizedName)) {
+      showToast({ title: 'Category Already Listed', message: 'This category is already in the official event catalog.', type: 'warning' });
+      return;
+    }
+    BetaStorage.addEvent({ name: name.trim(), type, description: 'Promoted from student submission categories' });
+    showToast({ title: 'Category Added', message: `${name} is now an official ${type === 'BETA' ? 'Beta-specific' : 'Non-Beta'} category. Existing submissions remain unchanged.`, type: 'success' });
     onRefresh();
   };
 
@@ -1089,15 +1124,11 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                               className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
                             >
                               <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Approve</span>
+                              <span>Review &amp; Assign</span>
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setReviewSub(sub);
-                                setCustomPts(String(sub.points));
-                                setReviewNote(sub.officerNotes || '');
-                              }}
+                              onClick={() => openReviewModal(sub)}
                               className="px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-200 rounded-xl text-xs font-mono transition-colors"
                               title="Adjust points or reject"
                             >
@@ -1393,11 +1424,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
 
                             <button
                               type="button"
-                              onClick={() => {
-                                setReviewSub(sub);
-                                setCustomPts(String(sub.points));
-                                setReviewNote(sub.officerNotes || '');
-                              }}
+                              onClick={() => openReviewModal(sub)}
                               className="px-2 py-1 bg-zinc-100 hover:bg-zinc-200 rounded-lg font-mono text-[11px] text-zinc-700"
                             >
                               Edit / Notes
@@ -1635,10 +1662,46 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   Chapter Event Categories ({events.length})
                 </h2>
                 <p className="text-xs text-zinc-500 font-mono">
-                  Manage categories students can choose during submission
+                  Official categories for the 5-hour Beta and 35-hour Non-Beta requirements
                 </p>
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2.5">
+                <span className="text-zinc-500">Beta-specific</span>
+                <strong className="ml-2 text-zinc-900">{events.filter(event => event.type === 'BETA').length} categories · {config.betaHoursTarget ?? 5} hrs required</strong>
+              </div>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2.5">
+                <span className="text-zinc-500">Non-Beta</span>
+                <strong className="ml-2 text-zinc-900">{events.filter(event => event.type === 'NONBETA').length} categories · {config.nonBetaHoursTarget ?? 35} hrs required</strong>
+              </div>
+            </div>
+
+            <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
+              <div>
+                <h3 className="text-sm font-bold text-amber-950">Submission categories not in the official catalog ({unlistedSubmissionCategories.length})</h3>
+                <p className="mt-1 text-[11px] text-amber-900">Student submissions do not create shared events. Promote a category only if it should appear as an official choice for future submissions.</p>
+              </div>
+              {unlistedSubmissionCategories.length === 0 ? (
+                <p className="text-xs text-amber-900">All submission categories are listed above.</p>
+              ) : (
+                <ul className="max-h-56 divide-y divide-amber-200 overflow-y-auto">
+                  {unlistedSubmissionCategories.map(category => (
+                    <li key={category.name.toLowerCase()} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-amber-950">{category.name}</p>
+                        <p className="text-[11px] text-amber-900">{category.submissions} submissions · {category.approvedHours.toFixed(1)} approved hours</p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button type="button" onClick={() => promoteSubmissionCategory(category.name, 'BETA')} className="min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 text-[11px] font-semibold text-zinc-800 hover:bg-zinc-100">Add as Beta</button>
+                        <button type="button" onClick={() => promoteSubmissionCategory(category.name, 'NONBETA')} className="min-h-9 rounded-lg border border-zinc-300 bg-white px-2.5 text-[11px] font-semibold text-zinc-800 hover:bg-zinc-100">Add as Non-Beta</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
             <form
               onSubmit={e => {
@@ -1693,6 +1756,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             </form>
 
             <div className="space-y-2 max-h-56 overflow-y-auto pr-1 text-xs">
+              {events.length === 0 && <p className="rounded-xl border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500">No official categories yet. Add categories here or promote a student submission category above.</p>}
               {events.map(evt => (
                 <div
                   key={evt.id}
@@ -1701,6 +1765,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   <div className="min-w-0">
                     <span className="font-semibold text-zinc-900 truncate block">{evt.name}</span>
                     <span className="text-[11px] text-zinc-400 font-mono truncate block">{evt.description}</span>
+                    <span className="text-[11px] text-zinc-500 font-mono">{submissions.filter(submission => submission.category.trim().toLowerCase() === evt.name.trim().toLowerCase()).length} linked submissions</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
@@ -1711,6 +1776,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        const linkedSubmissions = submissions.filter(submission => submission.category.trim().toLowerCase() === evt.name.trim().toLowerCase()).length;
+                        if (linkedSubmissions > 0 && !window.confirm(`Remove "${evt.name}" from the official catalog? The ${linkedSubmissions} existing submissions will remain in student history and appear as unlisted until the category is added again.`)) return;
                         BetaStorage.deleteEvent(evt.id);
                         showToast({ title: 'Event Removed', message: `Deleted ${evt.name}.`, type: 'info' });
                         onRefresh();
@@ -1740,7 +1807,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 Chapter Configuration & Security
               </h2>
               <p className="text-xs text-zinc-500 font-mono">
-                Control the annual point cap, hours-to-points multiplier, and officer passcode
+                Control the annual point cap, Beta service-hour requirements, and officer passcode
               </p>
             </div>
 
@@ -1784,6 +1851,21 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                   </p>
                 </div>
               </div>
+
+              <fieldset className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3.5">
+                <legend className="px-1 text-xs font-bold text-zinc-900">Annual Service Hour Requirements</legend>
+                <p className="text-[11px] text-zinc-500">These approved-hour targets are tracked separately from Beta points.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="beta-hours-target" className="text-xs font-semibold text-zinc-700">Beta-specific hours</label>
+                    <input id="beta-hours-target" type="number" min="0" step="0.5" value={editBetaHoursTarget} onChange={e => setEditBetaHoursTarget(e.target.value)} className="w-full min-h-11 rounded-lg border border-zinc-200 bg-white px-3 text-base sm:text-xs font-mono text-zinc-900" />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="nonbeta-hours-target" className="text-xs font-semibold text-zinc-700">Non-Beta hours</label>
+                    <input id="nonbeta-hours-target" type="number" min="0" step="0.5" value={editNonBetaHoursTarget} onChange={e => setEditNonBetaHoursTarget(e.target.value)} className="w-full min-h-11 rounded-lg border border-zinc-200 bg-white px-3 text-base sm:text-xs font-mono text-zinc-900" />
+                  </div>
+                </div>
+              </fieldset>
 
               <div className="space-y-1">
                 <label className="font-semibold text-zinc-800">Officer Master Passcode</label>
@@ -1943,6 +2025,29 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 <div>Hours Claimed: <strong>{reviewSub.hours} hrs</strong></div>
                 {reviewSub.comments && <div>Student Note: <span className="text-zinc-600">{reviewSub.comments}</span></div>}
               </div>
+
+              {reviewSub.hours > 0 && (
+                <fieldset className="space-y-2">
+                  <legend className="font-semibold text-zinc-700">Officer-assigned service type</legend>
+                  <p className="text-[11px] text-zinc-500">This determines which chapter hour requirement these approved hours count toward.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      ['BETA', 'Beta-specific'],
+                      ['NONBETA', 'Non-Beta']
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={reviewActivityType === value}
+                        onClick={() => setReviewActivityType(value)}
+                        className={`min-h-11 rounded-xl border px-3 py-2 font-semibold transition-colors ${reviewActivityType === value ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               <div className="space-y-1">
                 <label className="font-semibold text-zinc-700">Points to Credit</label>

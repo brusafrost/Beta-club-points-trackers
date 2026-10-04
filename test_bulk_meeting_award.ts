@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { awardBulkMeetingPoints } from './src/services/bulkMeetingPoints.ts';
 import { submissionBelongsToMember } from './src/utils/submissionBelongsToMember.ts';
+import { resolveServiceActivityType } from './src/utils/serviceActivityType.ts';
 import type { Member } from './src/types/index.ts';
 
 const emulatorAddress = process.env.FIRESTORE_EMULATOR_HOST;
@@ -74,6 +75,9 @@ assert.equal(submissionBelongsToMember(testSubmission, firstMember), true);
 assert.equal(submissionBelongsToMember({ ...testSubmission, studentEmail: secondMember.email }, firstMember), false);
 assert.equal(submissionBelongsToMember({ ...testSubmission, studentId: undefined }, firstMember), true);
 assert.equal(submissionBelongsToMember({ ...testSubmission, studentId: undefined, studentEmail: secondMember.email }, firstMember), false);
+assert.equal(resolveServiceActivityType(testSubmission, [{ id: 'beta', name: 'Test Activity', type: 'BETA', description: '' }]), 'BETA');
+assert.equal(resolveServiceActivityType({ ...testSubmission, category: 'Unlisted Activity' }, []), null);
+assert.equal(resolveServiceActivityType({ ...testSubmission, activityType: 'NONBETA' }, [{ id: 'beta', name: 'Test Activity', type: 'BETA', description: '' }]), 'NONBETA');
 
 async function run(): Promise<void> {
   try {

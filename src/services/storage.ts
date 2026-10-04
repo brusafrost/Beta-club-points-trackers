@@ -4,6 +4,7 @@ import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, ge
 import { db } from '../firebase';
 import { awardBulkMeetingPoints } from './bulkMeetingPoints';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
+import { resolveServiceActivityType } from '../utils/serviceActivityType';
 
 // Local cache
 let localMembers: Member[] = [];
@@ -16,6 +17,8 @@ let localOfficers: Officer[] = [];
 let localConfig: AppConfig = {
   pointCap: 50,
   hoursRate: 1,
+  betaHoursTarget: 5,
+  nonBetaHoursTarget: 35,
   officerCode: 'beta4216',
   clubName: 'High School Beta Club',
   academicYear: '2026-2027',
@@ -42,7 +45,7 @@ export class BetaStorage {
     // Listen to config
     onSnapshot(doc(db, 'config', 'main'), (snap) => {
       if (snap.exists()) {
-        localConfig = snap.data() as AppConfig;
+        localConfig = { ...localConfig, ...snap.data() } as AppConfig;
         if (localConfig.academicYear === '2023-2024') {
           localConfig = { ...localConfig, academicYear: '2026-2027' };
           setDoc(doc(db, 'config', 'main'), { academicYear: '2026-2027' }, { merge: true });
@@ -384,16 +387,18 @@ export class BetaStorage {
     return { success: true };
   }
 
-  public static approveSubmission(subId: string, customPoints?: number, notes?: string): { success: boolean; actualPoints: number; capMsg?: string; error?: string } {
+  public static approveSubmission(subId: string, customPoints?: number, notes?: string, activityType?: Submission['activityType']): { success: boolean; actualPoints: number; capMsg?: string; error?: string } {
     const sub = localSubmissions.find(s => s.id === subId);
     if (!sub) return { success: false, actualPoints: 0, error: 'Not found' };
+    const approvedActivityType = activityType || resolveServiceActivityType(sub, localEvents);
+    if (sub.hours > 0 && !approvedActivityType) return { success: false, actualPoints: 0, error: 'Choose Beta-specific or Non-Beta before approving this unlisted service category.' };
     const member = sub.studentId ? this.getMemberByStudentId(sub.studentId) : this.getMemberByEmail(sub.studentEmail);
     const requested = typeof customPoints === 'number' && !isNaN(customPoints) ? customPoints : sub.points;
     const currentPoints = member ? member.totalPoints : 0;
     const cap = localConfig.pointCap;
     const actual = Math.min(requested, Math.max(0, cap - currentPoints));
     
-    const updatedSub = { ...sub, points: actual, status: 'Approved' as SubmissionStatus };
+    const updatedSub = { ...sub, activityType: approvedActivityType, points: actual, status: 'Approved' as SubmissionStatus };
     if (notes) updatedSub.officerNotes = notes;
     setDoc(doc(db, 'submissions', subId), updatedSub);
     this.log('Submission approved', sub.studentName, `${sub.category}: ${actual.toFixed(1)} points${notes ? `; ${notes}` : ''}`);
@@ -474,20 +479,23 @@ export class BetaStorage {
     return 0; // Async
   }
 
-  public static batchApproveAllPending(): { success: boolean; count: number } {
+  public static batchApproveAllPending(): { success: boolean; count: number; skipped: number } {
     const pending = localSubmissions.filter(s => s.status === 'Pending');
+    const approvable = pending.filter(sub => sub.hours <= 0 || resolveServiceActivityType(sub, localEvents));
+    const skipped = pending.length - approvable.length;
     const batch = writeBatch(db);
-    pending.forEach(sub => {
+    approvable.forEach(sub => {
       const ref = doc(db, 'submissions', sub.id);
-      batch.update(ref, { status: 'Approved' });
+      const activityType = resolveServiceActivityType(sub, localEvents);
+      batch.update(ref, { status: 'Approved', ...(activityType ? { activityType } : {}) });
     });
-    batch.commit().then(() => {
+    if (approvable.length > 0) batch.commit().then(() => {
       // Lazy recalculate
-      const identities = new Set(pending.map(s => s.studentId || s.studentEmail));
+      const identities = new Set(approvable.map(s => s.studentId || s.studentEmail));
       identities.forEach(identity => this.recalculateMemberPoints(identity));
     });
-    this.log('Bulk approval', `${pending.length} submissions`, 'All pending submissions approved.');
-    return { success: true, count: pending.length };
+    if (approvable.length > 0) this.log('Bulk approval', `${approvable.length} submissions`, `${skipped} unclassified service submissions left pending for officer type selection.`);
+    return { success: true, count: approvable.length, skipped };
   }
 
   public static batchRejectAllPending(notes: string): { success: boolean; count: number } {

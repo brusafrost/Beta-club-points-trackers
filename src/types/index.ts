@@ -34,6 +34,8 @@ export interface MeetingPointAward {
   timestamp: string;
 }
 
+export type ServiceActivityType = 'BETA' | 'NONBETA';
+
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface Submission {
@@ -42,6 +44,7 @@ export interface Submission {
   studentId?: string;
   studentEmail: string;
   category: string;
+  activityType?: ServiceActivityType;
   hours: number;
   points: number;
   date: string;
@@ -57,7 +60,7 @@ export interface Submission {
 export interface EventItem {
   id: string;
   name: string;
-  type: 'BETA' | 'NONBETA';
+  type: ServiceActivityType;
   description: string;
   defaultHoursRate?: number;
 }
@@ -71,6 +74,8 @@ export interface Officer {
 export interface AppConfig {
   pointCap: number;
   hoursRate: number;
+  betaHoursTarget: number;
+  nonBetaHoursTarget: number;
   officerCode: string;
   clubName: string;
   academicYear: string;

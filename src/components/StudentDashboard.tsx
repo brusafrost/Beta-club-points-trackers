@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Member, Submission, AppConfig, MeetingPointAward } from '../types';
+import { Member, Submission, AppConfig, MeetingPointAward, EventItem } from '../types';
 import { BetaStorage } from '../services/storage';
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
+import { resolveServiceActivityType } from '../utils/serviceActivityType';
 import { useToast } from '../context/ToastContext';
 import {
   Clock,
@@ -32,6 +33,7 @@ interface StudentDashboardProps {
   member: Member;
   submissions: Submission[];
   meetingPointAwards: MeetingPointAward[];
+  events: EventItem[];
   config: AppConfig;
   onNavigateToSubmit: () => void;
   onViewProof: (sub: Submission) => void;
@@ -42,6 +44,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   member,
   submissions,
   meetingPointAwards,
+  events,
   config,
   onNavigateToSubmit,
   onViewProof,
@@ -56,6 +59,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const officers = BetaStorage.getOfficers();
   const allMembers = BetaStorage.getMembers();
+  const officialEvents = events;
 
   const mySubs = useMemo(() => {
     return submissions.filter(submission => submissionBelongsToMember(submission, member));
@@ -69,6 +73,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const approvedSubs = useMemo(() => mySubs.filter(s => s.status === 'Approved'), [mySubs]);
   const pendingSubs = useMemo(() => mySubs.filter(s => s.status === 'Pending'), [mySubs]);
   const rejectedSubs = useMemo(() => mySubs.filter(s => s.status === 'Rejected'), [mySubs]);
+  const approvedServiceHours = useMemo(() => {
+    const totals = { beta: 0, nonBeta: 0, unclassified: 0 };
+    approvedSubs.forEach(submission => {
+      if (submission.hours <= 0 || submission.category.toLowerCase().startsWith('bonus:')) return;
+      const type = resolveServiceActivityType(submission, officialEvents);
+      if (type === 'BETA') totals.beta += submission.hours;
+      else if (type === 'NONBETA') totals.nonBeta += submission.hours;
+      else totals.unclassified += submission.hours;
+    });
+    return totals;
+  }, [approvedSubs, officialEvents]);
 
   const approvedEventAndBonusPoints = approvedSubs.reduce((sum, s) => sum + (s.points || 0), 0);
   const approvedPoints = Math.max(0, approvedEventAndBonusPoints + (Number(member.manualPointAdjustment) || 0));
@@ -111,7 +126,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const categoryList = Object.entries(categoryMap).sort((a, b) => b[1].points - a[1].points);
   const eventPoints = categoryList.reduce((sum, [, stats]) => sum + stats.points, 0);
-  const events = BetaStorage.getEvents();
   const calendarDays = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -268,6 +282,38 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      <section aria-label="Service hour requirements" className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {([
+          { label: 'Beta-specific', hours: approvedServiceHours.beta, target: config.betaHoursTarget ?? 5, color: 'bg-emerald-600' },
+          { label: 'Non-Beta', hours: approvedServiceHours.nonBeta, target: config.nonBetaHoursTarget ?? 35, color: 'bg-sky-700' }
+        ]).map(item => {
+          const percent = item.target > 0 ? Math.min(100, item.hours / item.target * 100) : 100;
+          return (
+            <div key={item.label} className="rounded-xl border border-zinc-200 bg-white px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-zinc-900">{item.label} service</span>
+                <span className="shrink-0 font-mono text-xs font-bold text-zinc-700">{item.hours.toFixed(1)} / {item.target} hrs</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label={`${item.label} approved hours`}
+                aria-valuemin={0}
+                aria-valuemax={item.target}
+                aria-valuenow={Math.min(item.hours, item.target)}
+                className="h-2.5 overflow-hidden rounded-full bg-zinc-100"
+              >
+                <div className={`h-full ${item.color} transition-[width]`} style={{ width: `${percent}%` }} />
+              </div>
+            </div>
+          );
+        })}
+        {approvedServiceHours.unclassified > 0 && (
+          <p className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {approvedServiceHours.unclassified.toFixed(1)} approved service hours are awaiting officer Beta/Non-Beta classification and are not included in either requirement yet.
+          </p>
+        )}
+      </section>
 
       {/* Main Student Sub-Tabs Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 pb-2">

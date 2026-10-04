@@ -112,6 +112,7 @@ export default function App() {
               member={currentMember}
               submissions={submissions}
               meetingPointAwards={meetingPointAwards}
+              events={events}
               config={config}
               onNavigateToSubmit={() => setActiveSection('submit')}
               onViewProof={setSelectedProofSub}
@@ -217,6 +218,7 @@ export default function App() {
           member={selectedHistoryMember}
           submissions={submissions}
           meetingPointAwards={meetingPointAwards}
+          events={events}
           config={config}
           isOpen={Boolean(selectedHistoryMember)}
           onClose={() => setSelectedHistoryMember(null)}
