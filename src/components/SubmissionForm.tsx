@@ -143,6 +143,9 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
           <p className="text-xs text-zinc-500 font-mono mt-0.5">
             Submit service hours for officer review. Officers assign approved hours to the Beta-specific or Non-Beta requirement.
           </p>
+          <p className="text-[11px] text-zinc-500 font-mono mt-1">
+            Beta-specific includes Beta meetings and chapter activities. Non-Beta is volunteer service outside Beta, including chapter-shared opportunities.
+          </p>
         </div>
       </div>
 

@@ -96,6 +96,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [newEventName, setNewEventName] = useState<string>('');
   const [newEventType, setNewEventType] = useState<'BETA' | 'NONBETA'>('BETA');
   const [newEventDesc, setNewEventDesc] = useState<string>('');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingEventType, setEditingEventType] = useState<'BETA' | 'NONBETA'>('NONBETA');
+  const [editingEventDescription, setEditingEventDescription] = useState<string>('');
 
   // Officer creation
   const [newOffEmail, setNewOffEmail] = useState<string>('');
@@ -526,6 +529,17 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
     BetaStorage.addEvent({ name: name.trim(), type, description: 'Promoted from student submission categories' });
     showToast({ title: 'Category Added', message: `${name} is now an official ${type === 'BETA' ? 'Beta-specific' : 'Non-Beta'} category. Existing submissions remain unchanged.`, type: 'success' });
+    onRefresh();
+  };
+
+  const handleSaveEventCategory = async (event: EventItem) => {
+    const result = await BetaStorage.updateEvent(event.id, editingEventType, editingEventDescription);
+    if (!result.success) {
+      showToast({ title: 'Category Not Updated', message: result.error || 'Unable to update this category.', type: 'error' });
+      return;
+    }
+    showToast({ title: 'Category Updated', message: `Future submissions will use ${editingEventType === 'BETA' ? 'Beta-specific' : 'Non-Beta'}. ${result.preserved || 0} approved records kept their previous classification and points.`, type: 'success' });
+    setEditingEventId(null);
     onRefresh();
   };
 
@@ -1677,6 +1691,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 <strong className="ml-2 text-zinc-900">{events.filter(event => event.type === 'NONBETA').length} categories · {config.nonBetaHoursTarget ?? 35} hrs required</strong>
               </div>
             </div>
+            <p className="text-[11px] text-zinc-500">Beta-specific includes Beta chapter meetings and activities. Non-Beta means volunteer service outside Beta, including opportunities shared by the chapter.</p>
 
             <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
               <div>
@@ -1764,22 +1779,61 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 >
                   <div className="min-w-0">
                     <span className="font-semibold text-zinc-900 truncate block">{evt.name}</span>
-                    <span className="text-[11px] text-zinc-400 font-mono truncate block">{evt.description}</span>
+                    {editingEventId === evt.id ? (
+                      <input
+                        aria-label={`Description for ${evt.name}`}
+                        value={editingEventDescription}
+                        onChange={e => setEditingEventDescription(e.target.value)}
+                        className="mt-1 min-h-9 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-800"
+                      />
+                    ) : (
+                      <span className="text-[11px] text-zinc-400 font-mono truncate block">{evt.description}</span>
+                    )}
                     <span className="text-[11px] text-zinc-500 font-mono">{submissions.filter(submission => submission.category.trim().toLowerCase() === evt.name.trim().toLowerCase()).length} linked submissions</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-                      evt.type === 'BETA' ? 'bg-zinc-200 text-zinc-800' : 'bg-zinc-100 text-zinc-600'
-                    }`}>
-                      {evt.type}
-                    </span>
+                    {editingEventId === evt.id ? (
+                      <select
+                        aria-label={`Service type for ${evt.name}`}
+                        value={editingEventType}
+                        onChange={e => setEditingEventType(e.target.value as 'BETA' | 'NONBETA')}
+                        className="min-h-9 rounded-lg border border-zinc-200 bg-white px-2 text-[10px] font-mono font-bold"
+                      >
+                        <option value="BETA">BETA</option>
+                        <option value="NONBETA">NON-BETA</option>
+                      </select>
+                    ) : (
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${evt.type === 'BETA' ? 'bg-zinc-200 text-zinc-800' : 'bg-zinc-100 text-zinc-600'}`}>
+                        {evt.type}
+                      </span>
+                    )}
+                    {editingEventId === evt.id ? (
+                      <>
+                        <button type="button" onClick={() => handleSaveEventCategory(evt)} className="min-h-9 rounded-lg bg-zinc-900 px-2.5 text-[11px] font-semibold text-white">Save</button>
+                        <button type="button" onClick={() => setEditingEventId(null)} className="min-h-9 rounded-lg bg-zinc-100 px-2 text-[11px] text-zinc-700">Cancel</button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingEventId(evt.id);
+                          setEditingEventType(evt.type);
+                          setEditingEventDescription(evt.description || '');
+                        }}
+                        className="min-h-9 rounded-lg bg-zinc-100 px-2.5 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-200"
+                      >Edit</button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         const linkedSubmissions = submissions.filter(submission => submission.category.trim().toLowerCase() === evt.name.trim().toLowerCase()).length;
                         if (linkedSubmissions > 0 && !window.confirm(`Remove "${evt.name}" from the official catalog? The ${linkedSubmissions} existing submissions will remain in student history and appear as unlisted until the category is added again.`)) return;
-                        BetaStorage.deleteEvent(evt.id);
-                        showToast({ title: 'Event Removed', message: `Deleted ${evt.name}.`, type: 'info' });
+                        const result = await BetaStorage.deleteEvent(evt.id);
+                        if (!result.success) {
+                          showToast({ title: 'Category Not Deleted', message: result.error || 'Unable to remove the category.', type: 'error' });
+                          return;
+                        }
+                        showToast({ title: 'Event Removed', message: `Removed ${evt.name}. Existing submissions and points remain; ${result.preserved || 0} approved records kept their classification.`, type: 'info' });
                         onRefresh();
                       }}
                       className="p-1 text-zinc-400 hover:text-red-600 rounded"

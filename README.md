@@ -43,7 +43,7 @@ To verify the Firestore award transaction without touching production data, run 
 
 The chapter defaults are **5 approved Beta-specific hours** and **35 approved Non-Beta hours**, tracked separately from the annual points cap. Students submit an activity and hours but do not choose which requirement receives the credit. Officers assign the type when reviewing the submission; the official category type is preselected when available, and unlisted categories require an officer choice.
 
-Student-created activity names remain submission records, not shared events. In **Officer Portal → Tools**, unlisted submission categories are shown separately and can be promoted to official Beta or Non-Beta categories for future submissions. Historical submissions remain unchanged. Batch approval handles categories with a known official type and leaves unclassified service submissions pending for officer review.
+Student-created activity names remain submission records, not shared events. In **Officer Portal → Tools**, unlisted submission categories are shown separately and can be promoted to official Beta or Non-Beta categories for future submissions. Officers can edit or delete official categories; approved history keeps its existing type and points when a category changes or is removed. Batch approval handles categories with a known official type and leaves unclassified service submissions pending for officer review.
 
 ---
 

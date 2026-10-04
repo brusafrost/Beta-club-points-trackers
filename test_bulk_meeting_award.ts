@@ -14,7 +14,8 @@ import {
 import { awardBulkMeetingPoints } from './src/services/bulkMeetingPoints.ts';
 import { submissionBelongsToMember } from './src/utils/submissionBelongsToMember.ts';
 import { resolveServiceActivityType } from './src/utils/serviceActivityType.ts';
-import type { Member } from './src/types/index.ts';
+import { deleteEventCategory, updateEventCategory } from './src/services/eventCatalog.ts';
+import type { EventItem, Member, Submission } from './src/types/index.ts';
 
 const emulatorAddress = process.env.FIRESTORE_EMULATOR_HOST;
 if (!emulatorAddress) throw new Error('Run this test through the Firestore emulator; refusing to use a non-emulator database.');
@@ -55,6 +56,8 @@ const legacyMeetingName = `Legacy Emulator Meeting ${Date.now()}`;
 const legacyMeetingKey = legacyMeetingName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
 const legacyAuditRef = doc(database, 'auditLogs', `meeting-award-${legacyMeetingKey}`);
 const legacyReceiptRef = doc(database, 'meetingPointAwards', `${legacyMeetingKey}-${encodeURIComponent(secondMember.id)}`);
+const preservedEvent: EventItem = { id: `event-test-${Date.now()}`, name: 'Preserved Test Category', type: 'NONBETA', description: 'Before edit' };
+const preservedEventRef = doc(database, 'events', preservedEvent.id);
 
 const testSubmission = {
   id: 'submission-test',
@@ -70,6 +73,9 @@ const testSubmission = {
   status: 'Approved' as const,
   timestamp: new Date().toISOString()
 };
+const approvedLegacySubmission: Submission = { ...testSubmission, id: `approved-category-test-${Date.now()}`, category: preservedEvent.name, points: 4, hours: 4 };
+const pendingLegacySubmission: Submission = { ...approvedLegacySubmission, id: `pending-category-test-${Date.now()}`, status: 'Pending', points: 4 };
+const categorySubmissionRefs = [doc(database, 'submissions', approvedLegacySubmission.id), doc(database, 'submissions', pendingLegacySubmission.id)];
 
 assert.equal(submissionBelongsToMember(testSubmission, firstMember), true);
 assert.equal(submissionBelongsToMember({ ...testSubmission, studentEmail: secondMember.email }, firstMember), false);
@@ -138,14 +144,37 @@ async function run(): Promise<void> {
     assert.equal(auditDocs.length, 2, 'a make-up batch should create a separate audit entry');
     auditDocs.forEach(entry => assert.doesNotMatch(entry.details || '', /Test Alpha|Test Beta/));
 
+    await Promise.all([
+      setDoc(preservedEventRef, preservedEvent),
+      setDoc(categorySubmissionRefs[0], approvedLegacySubmission),
+      setDoc(categorySubmissionRefs[1], pendingLegacySubmission)
+    ]);
+    const updateResult = await updateEventCategory(database, preservedEvent, 'BETA', 'Edited Beta category');
+    assert.deepEqual(updateResult, { success: true, preserved: 1 });
+    const savedEvent = (await getDoc(preservedEventRef)).data() as EventItem;
+    const savedApproved = (await getDoc(categorySubmissionRefs[0])).data() as Submission;
+    const savedPending = (await getDoc(categorySubmissionRefs[1])).data() as Submission;
+    assert.equal(savedEvent.type, 'BETA');
+    assert.equal(savedApproved.activityType, 'NONBETA', 'already-approved service keeps its original classification');
+    assert.equal(savedApproved.points, 4, 'category editing must not alter existing points');
+    assert.equal(savedPending.activityType, undefined, 'pending service uses the updated catalog type when reviewed');
+    assert.equal(resolveServiceActivityType(savedPending, [savedEvent]), 'BETA');
+
+    const deleteResult = await deleteEventCategory(database, savedEvent);
+    assert.deepEqual(deleteResult, { success: true, preserved: 0 });
+    assert.equal((await getDoc(preservedEventRef)).exists(), false);
+    assert.equal((await getDoc(categorySubmissionRefs[0])).data()?.points, 4, 'deleting a category must not delete or change approved credit');
+    assert.equal((await getDoc(categorySubmissionRefs[0])).data()?.activityType, 'NONBETA');
+
+    await Promise.all(categorySubmissionRefs.map(reference => deleteDoc(reference)));
     assert.equal((await getDocs(collection(database, 'submissions'))).size, 0);
     assert.equal((await getDocs(collection(database, 'events'))).size, 0);
-    console.log('Firestore emulator test passed: identity matching, selected awards, make-up batches, duplicate protection, legacy safety, audit privacy, and no submissions/events.');
+    console.log('Firestore emulator test passed: identity matching, officer service-type assignment, event edit/delete preservation, selected awards, make-up batches, duplicate protection, legacy safety, audit privacy, and no submission/event loss.');
   } finally {
     const meetingAudits = (await getDocs(collection(database, 'auditLogs'))).docs
       .filter(snapshot => snapshot.data().details?.startsWith(`${meetingName}:`) || snapshot.id === legacyAuditRef.id)
       .map(snapshot => snapshot.ref);
-    await Promise.all([...memberRefs, ...meetingAudits, firstReceiptRef, secondReceiptRef, legacyReceiptRef].map(reference => deleteDoc(reference).catch(() => undefined)));
+    await Promise.all([...memberRefs, ...categorySubmissionRefs, preservedEventRef, ...meetingAudits, firstReceiptRef, secondReceiptRef, legacyReceiptRef].map(reference => deleteDoc(reference).catch(() => undefined)));
     await terminate(database);
   }
 }

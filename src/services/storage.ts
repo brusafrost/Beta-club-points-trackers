@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { awardBulkMeetingPoints } from './bulkMeetingPoints';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
+import { deleteEventCategory, updateEventCategory } from './eventCatalog';
 
 // Local cache
 let localMembers: Member[] = [];
@@ -143,8 +144,19 @@ export class BetaStorage {
     setDoc(doc(db, 'events', id), newEvent);
     return newEvent;
   }
-  public static deleteEvent(id: string): void {
-    deleteDoc(doc(db, 'events', id));
+  public static async updateEvent(id: string, type: EventItem['type'], description: string): Promise<{ success: boolean; preserved?: number; error?: string }> {
+    const event = localEvents.find(item => item.id === id);
+    if (!event) return { success: false, error: 'Event category not found.' };
+    const result = await updateEventCategory(db, event, type, description);
+    if (result.success) this.log('Event category updated', event.name, `Type set to ${type}; ${result.preserved} historical submissions retained their prior type.`);
+    return result;
+  }
+  public static async deleteEvent(id: string): Promise<{ success: boolean; preserved?: number; error?: string }> {
+    const event = localEvents.find(item => item.id === id);
+    if (!event) return { success: false, error: 'Event category not found.' };
+    const result = await deleteEventCategory(db, event);
+    if (result.success) this.log('Event category deleted', event.name, `${result.preserved} approved submissions retained their prior type; submissions and points were not deleted.`);
+    return result;
   }
 
   // ---- AUTH & SESSION ----
