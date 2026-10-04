@@ -38,7 +38,9 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
     const eventSubs = approvedSubs.filter(s => !s.category.toLowerCase().startsWith('bonus:'));
     const eventCategories = new Set(eventSubs.map(s => s.category));
     const missingFromEvents = Array.from(eventCategories).filter(cat => !events.some(e => e.name === cat));
-    const extraEvents = missingFromEvents.map((cat, idx) => ({ id: `custom-${idx}-${cat.replace(/[^a-z0-9]+/ig,'-')}`, name: cat, type: 'NONBETA' as const, description: 'Submission-only category' }));
+    const extraEvents = isOfficer
+      ? missingFromEvents.map((cat, idx) => ({ id: `custom-${idx}-${cat.replace(/[^a-z0-9]+/ig,'-')}`, name: cat, type: 'NONBETA' as const, description: 'Submission-only category' }))
+      : [];
 
     const activeEvents = eventFilter === 'ALL'
       ? [...events, ...extraEvents]

@@ -23,7 +23,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
 
     // Include all events plus any submission-only categories
     const submissionCats = Array.from(new Set(eventSubs.map(s => s.category)));
-    const extraCats = submissionCats.filter(cat => !events.some(e => e.name === cat));
+    const extraCats = isOfficer ? submissionCats.filter(cat => !events.some(e => e.name === cat)) : [];
     const allEvents = [...events.map(e => e.name), ...extraCats];
 
     const rows = members.map(m => {
@@ -35,13 +35,15 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
         eventPoints[submission.category] = (eventPoints[submission.category] || 0) + (submission.points || 0);
       });
       const cells = allEvents.map(ev => ({ event: ev, points: eventPoints[ev] || 0 }));
-      const eventTotal = cells.reduce((sum, cell) => sum + cell.points, 0);
+      const totalServicePoints = Object.values(eventPoints).reduce((sum, points) => sum + points, 0);
+      const visibleEventTotal = cells.reduce((sum, cell) => sum + cell.points, 0);
+      const eventTotal = isOfficer ? totalServicePoints : visibleEventTotal;
       const canSeePrivatePoints = isOfficer || key === viewerMemberId;
       const bonus = canSeePrivatePoints
         ? ownApprovedSubs.filter(submission => submission.category.toLowerCase().startsWith('bonus:')).reduce((sum, submission) => sum + (submission.points || 0), 0)
         : 0;
       const adjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
-      return { member: m, cells, eventTotal, bonus, adjustment, total: eventTotal + bonus + adjustment };
+      return { member: m, cells, eventTotal, bonus, adjustment, total: totalServicePoints + bonus + adjustment };
     });
 
     return { displayEvents: allEvents, rows };
