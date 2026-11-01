@@ -770,107 +770,118 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredSubs.map((sub) => (
-                <div
-                  key={sub.id}
-                  className={`p-5 rounded-2xl border transition-all ${
-                    sub.status === 'Approved'
-                      ? 'bg-white border-emerald-200 hover:border-emerald-300'
-                      : sub.status === 'Pending'
-                      ? 'bg-amber-50/40 border-amber-200 hover:border-amber-300'
-                      : 'bg-red-50/40 border-red-200 hover:border-red-300'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                    
-                    {/* Left: Main Details */}
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-base text-zinc-900">
-                          {sub.category}
-                        </h3>
-                        
-                        {/* Status Badge */}
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold uppercase flex items-center gap-1.5 ${
-                          sub.status === 'Approved'
-                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : sub.status === 'Pending'
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-red-100 text-red-900 border border-red-300'
-                        }`}>
-                          {sub.status === 'Approved' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />}
-                          {sub.status === 'Pending' && <Clock className="w-3.5 h-3.5 text-amber-700" />}
-                          {sub.status === 'Rejected' && <XCircle className="w-3.5 h-3.5 text-red-700" />}
-                          <span>{sub.status}</span>
-                        </span>
-                      </div>
+              {filteredSubs.map((sub) => {
+                const activityType = resolveServiceActivityType(sub, officialEvents);
+                const typeBadge = activityType === 'BETA'
+                  ? { label: 'Beta-specific', className: 'bg-emerald-100 text-emerald-900 border border-emerald-300' }
+                  : activityType === 'NONBETA'
+                  ? { label: 'Non-Beta', className: 'bg-sky-100 text-sky-900 border border-sky-300' }
+                  : { label: 'Needs classification', className: 'bg-amber-100 text-amber-900 border border-amber-300' };
 
-                      {/* Meta Information Bar */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-zinc-600">
-                        <span>📅 Date: <strong className="text-zinc-800">{formatDate(sub.date)}</strong></span>
-                        <span>⏱️ Hours Logged: <strong className="text-zinc-800">{sub.hours} hrs</strong></span>
-                        <span>🏆 Credit Awarded: <strong className={sub.status === 'Approved' ? 'text-emerald-800' : 'text-zinc-800'}>{sub.points.toFixed(1)} pts</strong></span>
-                        <span>👤 Reviewer: <strong className="text-zinc-800">Officer</strong></span>
-                      </div>
-
-                      {/* Student Submitted Comment */}
-                      {sub.comments && (
-                        <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-mono text-zinc-700">
-                          <span className="font-bold text-zinc-900 block mb-0.5">Your Submission Details:</span>
-                          <p>{sub.comments}</p>
-                        </div>
-                      )}
-
-                      {/* Officer Review Feedback */}
-                      {sub.officerNotes && (
-                        <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs font-mono text-zinc-800">
-                          <span className="font-bold text-blue-900 flex items-center gap-1 mb-0.5">
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span>Officer Review Notes:</span>
+                return (
+                  <div
+                    key={sub.id}
+                    className={`p-5 rounded-2xl border transition-all ${
+                      sub.status === 'Approved'
+                        ? 'bg-white border-emerald-200 hover:border-emerald-300'
+                        : sub.status === 'Pending'
+                        ? 'bg-amber-50/40 border-amber-200 hover:border-amber-300'
+                        : 'bg-red-50/40 border-red-200 hover:border-red-300'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      
+                      {/* Left: Main Details */}
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-base text-zinc-900">
+                            {sub.category}
+                          </h3>
+                          
+                          {/* Status Badge */}
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold uppercase flex items-center gap-1.5 ${
+                            sub.status === 'Approved'
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : sub.status === 'Pending'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-red-100 text-red-900 border border-red-300'
+                          }`}>
+                            {sub.status === 'Approved' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />}
+                            {sub.status === 'Pending' && <Clock className="w-3.5 h-3.5 text-amber-700" />}
+                            {sub.status === 'Rejected' && <XCircle className="w-3.5 h-3.5 text-red-700" />}
+                            <span>{sub.status}</span>
                           </span>
-                          <p>{sub.officerNotes}</p>
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold uppercase ${typeBadge.className}`}>
+                            {typeBadge.label}
+                          </span>
                         </div>
-                      )}
-                    </div>
 
-                    {/* Right: Proof Slip Thumbnail & Actions */}
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0">
-                      {sub.proofUrl ? (
+                        {/* Meta Information Bar */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono text-zinc-600">
+                          <span>📅 Date: <strong className="text-zinc-800">{formatDate(sub.date)}</strong></span>
+                          <span>⏱️ Hours Logged: <strong className="text-zinc-800">{sub.hours} hrs</strong></span>
+                          <span>🏆 Credit Awarded: <strong className={sub.status === 'Approved' ? 'text-emerald-800' : 'text-zinc-800'}>{sub.points.toFixed(1)} pts</strong></span>
+                          <span>👤 Reviewer: <strong className="text-zinc-800">Officer</strong></span>
+                        </div>
+
+                        {/* Student Submitted Comment */}
+                        {sub.comments && (
+                          <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-mono text-zinc-700">
+                            <span className="font-bold text-zinc-900 block mb-0.5">Your Submission Details:</span>
+                            <p>{sub.comments}</p>
+                          </div>
+                        )}
+
+                        {/* Officer Review Feedback */}
+                        {sub.officerNotes && (
+                          <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs font-mono text-zinc-800">
+                            <span className="font-bold text-blue-900 flex items-center gap-1 mb-0.5">
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span>Officer Review Notes:</span>
+                            </span>
+                            <p>{sub.officerNotes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Proof Slip Thumbnail & Actions */}
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0">
+                        {sub.proofUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => onViewProof(sub)}
+                            className="group relative rounded-xl overflow-hidden border border-zinc-200 hover:border-zinc-400 transition-colors w-24 h-16 bg-zinc-100 flex items-center justify-center"
+                            title="Click to view full photo proof slip"
+                          >
+                            <img
+                              src={sub.proofUrl}
+                              alt="Proof slip"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-mono font-bold">
+                              View Slip
+                            </div>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-mono text-zinc-400 px-2 py-1 bg-zinc-100 rounded-lg">
+                            No Photo Slip
+                          </span>
+                        )}
+
                         <button
                           type="button"
-                          onClick={() => onViewProof(sub)}
-                          className="group relative rounded-xl overflow-hidden border border-zinc-200 hover:border-zinc-400 transition-colors w-24 h-16 bg-zinc-100 flex items-center justify-center"
-                          title="Click to view full photo proof slip"
+                          onClick={() => handleOpenInquiryForSub(sub)}
+                          className="px-3 py-1.5 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-700 flex items-center gap-1.5 transition-colors"
+                          title="Send question to officers about this log"
                         >
-                          <img
-                            src={sub.proofUrl}
-                            alt="Proof slip"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-mono font-bold">
-                            View Slip
-                          </div>
+                          <MessageSquare className="w-3 h-3 text-zinc-500" />
+                          <span>Inquire</span>
                         </button>
-                      ) : (
-                        <span className="text-[11px] font-mono text-zinc-400 px-2 py-1 bg-zinc-100 rounded-lg">
-                          No Photo Slip
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenInquiryForSub(sub)}
-                        className="px-3 py-1.5 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-700 flex items-center gap-1.5 transition-colors"
-                        title="Send question to officers about this log"
-                      >
-                        <MessageSquare className="w-3 h-3 text-zinc-500" />
-                        <span>Inquire</span>
-                      </button>
+                      </div>
                     </div>
-
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

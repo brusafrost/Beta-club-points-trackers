@@ -335,6 +335,13 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
             ) : (
               <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-xl overflow-hidden bg-white">
                 {memberSubs.map((sub) => {
+                  const activityType = resolveServiceActivityType(sub, events);
+                  const typeBadge = activityType === 'BETA'
+                    ? { label: 'Beta-specific', className: 'bg-emerald-100 text-emerald-800 border border-emerald-200' }
+                    : activityType === 'NONBETA'
+                    ? { label: 'Non-Beta', className: 'bg-sky-100 text-sky-800 border border-sky-200' }
+                    : { label: 'Needs classification', className: 'bg-amber-100 text-amber-800 border border-amber-200' };
+
                   return (
                     <div key={sub.id} className="p-3.5 hover:bg-zinc-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                       <div className="space-y-1 min-w-0 flex-1">
@@ -346,6 +353,9 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
                             'bg-red-100 text-red-800 border border-red-200'
                           }`}>
                             {sub.status}
+                          </span>
+                          <span className={`px-2 py-0.2 rounded text-[10px] font-mono font-bold uppercase ${typeBadge.className}`}>
+                            {typeBadge.label}
                           </span>
                           {sub.isArchivedFromQueue && (
                             <span className="px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-500 font-mono text-[9px]">
