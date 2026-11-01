@@ -33,74 +33,133 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return; // Prevent multiple clicks
+    
     setErrorMsg('');
     setSuccessMsg('');
     setIsLoading(true);
 
-    if (studentMode === 'register') {
-      if (!firstName.trim() || !lastName.trim() || !studentId.trim()) {
-        setErrorMsg('Please fill in all required fields.');
-        setIsLoading(false);
-        return;
-      }
-      if (!isValidStudentId(studentId)) {
-        setErrorMsg('Student ID must contain 9 or 10 numbers.');
-        setIsLoading(false);
-        return;
-      }
-      if (password && password.length < 6) {
-        setErrorMsg('Password must be at least 6 characters.');
-        setIsLoading(false);
-        return;
-      }
-      if (password !== confirmPassword) {
-        setErrorMsg('Passwords do not match.');
-        setIsLoading(false);
-        return;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    try {
+      if (studentMode === 'register') {
+        if (!firstName.trim() || !lastName.trim() || !studentId.trim()) {
+          setErrorMsg('Please fill in all required fields.');
+          setIsLoading(false);
+          return;
+        }
+        if (!isValidStudentId(studentId)) {
+          setErrorMsg('Student ID must contain 9 or 10 numbers.');
+          setIsLoading(false);
+          return;
+        }
+        if (password && password.length < 6) {
+          setErrorMsg('Password must be at least 6 characters.');
+          setIsLoading(false);
+          return;
+        }
+        if (password !== confirmPassword) {
+          setErrorMsg('Passwords do not match.');
+          setIsLoading(false);
+          return;
+        }
+
+
+
+
+
+
+
+
+
+        const res = await BetaStorage.registerMember(
+          firstName,
+          lastName,
+          studentId,
+          email,
+          password || undefined,
+          gradeLevel
+        );
+
+
+
+
+
+
+        if (!res.success) {
+          setErrorMsg(res.error || 'Registration failed.');
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        // Sign in mode
+        if (!studentId.trim()) {
+          setErrorMsg('Please enter your student ID.');
+          setIsLoading(false);
+          return;
+        }
+        if (!isValidStudentId(studentId)) {
+          setErrorMsg('Student ID must contain 9 or 10 numbers.');
+          setIsLoading(false);
+          return;
+        }
+
+
+
+
+
+
+
+
+
+        const res = await BetaStorage.loginStudent(studentId);
+        if (!res.success) {
+          setErrorMsg(res.error || 'Login failed. Please check your credentials.');
+          setIsLoading(false);
+          return;
+        }
       }
 
-      const res = await BetaStorage.registerMember(
-        firstName,
-        lastName,
-        studentId,
-        email,
-        password || undefined,
-        gradeLevel
-      );
 
-      if (!res.success) {
-        setErrorMsg(res.error || 'Registration failed.');
-        setIsLoading(false);
-        return;
-      }
+
+
+
+
+
+
+
+
+
+
 
       const session = BetaStorage.getSession();
       if (session) onLoginSuccess(session);
-    } else {
-      // Sign in mode
-      if (!studentId.trim()) {
-        setErrorMsg('Please enter your student ID.');
-        setIsLoading(false);
-        return;
-      }
-      if (!isValidStudentId(studentId)) {
-        setErrorMsg('Student ID must contain 9 or 10 numbers.');
-        setIsLoading(false);
-        return;
-      }
-
-      const res = await BetaStorage.loginStudent(studentId);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Login failed. Please check your credentials.');
-        setIsLoading(false);
-        return;
-      }
-
-      const session = BetaStorage.getSession();
-      if (session) onLoginSuccess(session);
+    } catch (err) {
+      setErrorMsg('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
 
-    setIsLoading(false);
+
   };
 
   const handleOfficerSubmit = (e: React.FormEvent) => {
@@ -344,10 +403,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full min-h-12 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+
+                className="w-full min-h-12 py-3 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
               >
-                <span>{isLoading ? 'Processing...' : studentMode === 'signin' ? 'Sign In to Dashboard' : 'Complete Registration & Join'}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+
+
+                <span>{isLoading ? 'Processing securely...' : studentMode === 'signin' ? 'Sign In to Dashboard' : 'Complete Registration & Join'}</span>
+                {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
               </button>
             </form>
           </div>

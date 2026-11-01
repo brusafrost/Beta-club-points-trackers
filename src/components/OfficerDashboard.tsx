@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Member, Submission, EventItem, Officer, AppConfig, MeetingPointAward } from '../types';
 import { BetaStorage } from '../services/storage';
+import { getUniqueMembers } from '../utils/memberDeduplicator';
 import { formatDate, formatDateTime, formatFriendlyTimestamp } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
+import { parseBulkPointEntries } from '../utils/bulkPointEntryParser';
 import { ProofImageStore } from '../services/imageStore';
 import { useToast } from '../context/ToastContext';
 import {
@@ -110,19 +112,19 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [bonusReason, setBonusReason] = useState<string>('');
   const [bonusOverCap, setBonusOverCap] = useState<boolean>(false);
   const [bulkPointsText, setBulkPointsText] = useState<string>('');
+  const [isSavingBulkPoints, setIsSavingBulkPoints] = useState<boolean>(false);
   const [meetingPointText, setMeetingPointText] = useState<string>('');
   const [meetingPointLabel, setMeetingPointLabel] = useState<string>('');
   const [excludedMeetingPointMemberIds, setExcludedMeetingPointMemberIds] = useState<Set<string>>(() => new Set());
   const [isAwardingMeetingPoints, setIsAwardingMeetingPoints] = useState<boolean>(false);
 
   // Settings
-  const [editCap, setEditCap] = useState<string>(String(config.pointCap || 40));
   const [editRate, setEditRate] = useState<string>(String(config.hoursRate || 1.0));
   const [editBetaHoursTarget, setEditBetaHoursTarget] = useState<string>(String(config.betaHoursTarget ?? 5));
   const [editNonBetaHoursTarget, setEditNonBetaHoursTarget] = useState<string>(String(config.nonBetaHoursTarget ?? 35));
   const [editCode, setEditCode] = useState<string>(config.officerCode || 'beta4216');
   const [editClubName, setEditClubName] = useState<string>(config.clubName || 'National Beta Club');
-  const [editSchoolName, setEditSchoolName] = useState<string>(config.schoolName || 'Westview High School');
+  const [editSchoolName, setEditSchoolName] = useState<string>(config.schoolName || 'Grayson High School');
 
   // Storage Stats
   const [storageEstimate, setStorageEstimate] = useState<{ usageMB: string; quotaMB: string; percent: string }>({
@@ -184,6 +186,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     const officialCategories = new Set(events.map(event => event.name.trim().toLowerCase()));
     const categories = new Map<string, { name: string; submissions: number; approvedHours: number }>();
     submissions.forEach(submission => {
+      if (submission.hours <= 0 || submission.category.toLowerCase().startsWith('bonus:')) return;
       const name = submission.category.trim();
       const key = name.toLowerCase();
       if (!key || officialCategories.has(key)) return;
@@ -241,18 +244,21 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     [submissions, members]
   );
 
+  // Student Selector Sidebar list - Apply deduplication for safety
+  const displayMembers = useMemo(() => getUniqueMembers(members), [members]);
+
   // Filtered members list for Student Selector in History Tab
   const filteredStudentsList = useMemo(() => {
-    if (!studentSearchQuery.trim()) return members;
+    if (!studentSearchQuery.trim()) return displayMembers;
     const q = studentSearchQuery.toLowerCase().trim();
-    return members.filter(
+    return displayMembers.filter(
       m =>
         m.name.toLowerCase().includes(q) ||
         m.email.toLowerCase().includes(q) ||
         (m.studentId && m.studentId.toLowerCase().includes(q)) ||
         String(m.gradeLevel || '').includes(q)
     );
-  }, [members, studentSearchQuery]);
+  }, [displayMembers, studentSearchQuery]);
 
   // Filtered Inbox List
   const filteredInbox = useMemo(() => {
@@ -335,17 +341,21 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     onRefresh();
   };
 
-  const handleApproveAllPending = () => {
+  const handleApproveAllPending = async () => {
     if (pendingSubs.length === 0) {
       showToast({ title: 'Notice', message: 'No pending submissions in queue.', type: 'info' });
       return;
     }
-    const res = BetaStorage.batchApproveAllPending();
+    const res = await BetaStorage.batchApproveAllPending();
+    if (!res.success) {
+      showToast({ title: 'Batch Approval Failed', message: res.error || 'Pending submissions were not approved.', type: 'error' });
+      return;
+    }
     if (res.success) {
       showToast({
         title: 'Batch Approval Complete',
-        message: `Approved ${res.count} classified submissions${res.skipped ? `; ${res.skipped} unclassified submissions remain pending for Beta/Non-Beta selection` : ''}. Member points are capped at ${config.pointCap || 40}.`,
-        type: res.skipped ? 'warning' : 'success'
+        message: `Approved ${res.count} submissions${res.capped ? `; ${res.capped} had points capped` : ''}${res.skipped ? `; ${res.skipped} unclassified or unmatched submissions remain pending` : ''}.`,
+        type: res.skipped || res.capped ? 'warning' : 'success'
       });
       onRefresh();
     }
@@ -456,30 +466,53 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     }
   };
 
-  const handleBulkPoints = () => {
-    const lines = bulkPointsText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const handleBulkPoints = async () => {
+    const parsed = parseBulkPointEntries(bulkPointsText);
     let added = 0;
-    let skipped = 0;
-    lines.forEach(line => {
-      const [studentId, pointsText, eventName, ...noteParts] = line.split(/\t|,/).map(value => value.trim());
-      const matchingMembers = members.filter(item => item.studentId === studentId);
-      const member = matchingMembers.length === 1 ? matchingMembers[0] : undefined;
-      const points = Number(pointsText);
-      if (!member || !Number.isFinite(points) || points <= 0 || !eventName) {
-        skipped++;
-        return;
-      }
-      BetaStorage.addOfficerPointsEntry(member.id, eventName, points, noteParts.join(', '));
-      added++;
+    const failedLines = [...parsed.invalidLines];
+    const failureReasons: string[] = [];
+    const memberById = new Map<string, Member[]>();
+    members.forEach(member => {
+      const studentId = (member.studentId || '').trim();
+      if (studentId) memberById.set(studentId, [...(memberById.get(studentId) || []), member]);
     });
-    setBulkPointsText('');
-    showToast({ title: 'Bulk Points Processed', message: `${added} entries saved${skipped ? `, ${skipped} skipped because of an invalid ID, event, or points value` : '.'}`, type: skipped ? 'warning' : 'success' });
-    onRefresh();
+
+    setIsSavingBulkPoints(true);
+    for (const entry of parsed.entries) {
+      const matchingMembers = memberById.get(entry.studentId) || [];
+      const member = matchingMembers.length === 1 ? matchingMembers[0] : undefined;
+      if (!member) {
+        failedLines.push({ line: entry.line, raw: entry.raw });
+        failureReasons.push(`Line ${entry.line}: student ID is missing or matches multiple roster members.`);
+        continue;
+      }
+      try {
+        const result = await BetaStorage.addOfficerPointsEntry(member.id, entry.eventName, entry.points, entry.notes);
+        if (result.success) added++;
+        else {
+          failedLines.push({ line: entry.line, raw: entry.raw });
+          failureReasons.push(`Line ${entry.line}: ${result.error || 'save failed.'}`);
+        }
+      } catch (error) {
+        failedLines.push({ line: entry.line, raw: entry.raw });
+        failureReasons.push(`Line ${entry.line}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    setIsSavingBulkPoints(false);
+    setBulkPointsText(failedLines.map(item => item.raw).join('\n'));
+
+    const skipped = failedLines.length;
+    if (added > 0) onRefresh();
+    showToast({
+      title: skipped ? 'Bulk Points Partially Saved' : 'Bulk Points Saved',
+      message: `${added} entries saved${skipped ? `; ${skipped} lines remain in the box. ${failureReasons[0] || 'Check the row format and student ID.'}` : '.'}`,
+      type: skipped ? 'warning' : 'success'
+    });
   };
 
   const handleBulkMeetingPointAward = async () => {
     if (!meetingPointLabel.trim() || selectedMeetingPointMembers.length === 0) return;
-    const confirmed = window.confirm(`Award 1 point to the ${selectedMeetingPointMembers.length} selected students for "${meetingPointLabel.trim()}"? Students who already received this meeting point will be skipped. This creates no submission or website event.`);
+    const confirmed = window.confirm(`Award 1 point to the ${selectedMeetingPointMembers.length} selected students for "${meetingPointLabel.trim()}"? Students who already received this meeting point will be skipped. The points will count under the Beta-specific master category.`);
     if (!confirmed) return;
 
     setIsAwardingMeetingPoints(true);
@@ -505,13 +538,13 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     BetaStorage.updateConfig({
-      pointCap: Number(editCap) || 40,
+      pointCap: 40,
       hoursRate: Number(editRate) || 1.0,
       betaHoursTarget: Math.max(0, Number(editBetaHoursTarget) || 0),
       nonBetaHoursTarget: Math.max(0, Number(editNonBetaHoursTarget) || 0),
       officerCode: editCode.trim() || 'beta4216',
       clubName: editClubName.trim() || 'National Beta Club',
-      schoolName: editSchoolName.trim() || 'Westview High School'
+      schoolName: editSchoolName.trim() || 'Grayson High School'
     });
     showToast({
       title: 'Configuration Saved',
@@ -779,7 +812,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
           </div>
 
-          <AllStudentsMatrix members={members} submissions={submissions} events={events} isOfficer />
+          <AllStudentsMatrix members={members} submissions={submissions} events={events} meetingPointAwards={meetingPointAwards} isOfficer />
         </div>
       )}
 
@@ -1571,7 +1604,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
           <div className="lg:col-span-12 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
             <div>
               <h2 className="text-base font-bold text-zinc-900">Bulk Point Entries With Student History</h2>
-              <p className="text-xs text-zinc-500 font-mono">Paste one entry per line: student ID, points, event, optional note.</p>
+              <p className="text-xs text-zinc-500 font-mono">Paste one entry per line: student ID, points, event, optional note. Tab-separated spreadsheet rows and quoted CSV event names are supported.</p>
             </div>
             <textarea
               value={bulkPointsText}
@@ -1582,10 +1615,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             />
             <button
               type="button"
-              onClick={handleBulkPoints}
-              disabled={!bulkPointsText.trim()}
+              onClick={() => void handleBulkPoints()}
+              disabled={!bulkPointsText.trim() || isSavingBulkPoints}
               className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-xl text-xs font-semibold"
-            >Save Point Entries
+            >{isSavingBulkPoints ? 'Saving Entries...' : 'Save Point Entries'}
             </button>
           </div>
           
@@ -1861,28 +1894,19 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
                 Chapter Configuration & Security
               </h2>
               <p className="text-xs text-zinc-500 font-mono">
-                Control the annual point cap, Beta service-hour requirements, and officer passcode
+                The annual point cap is fixed at 40. Configure Beta service-hour requirements and the officer passcode here.
               </p>
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-semibold text-zinc-800">
-                    Annual Point Cap (Standard: 40.0)
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="5"
-                    max="100"
-                    required
-                    value={editCap}
-                    onChange={e => setEditCap(e.target.value)}
-                    className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-zinc-900 font-bold focus:outline-hidden focus:border-zinc-500"
-                  />
+                  <label className="font-semibold text-zinc-800">Annual Point Cap</label>
+                  <div className="w-full rounded-xl border border-zinc-200 bg-zinc-100 p-2.5 font-mono font-bold text-zinc-700">
+                    40 points (fixed)
+                  </div>
                   <p className="text-[11px] text-zinc-400 font-mono">
-                    All single logs and bulk approvals cap strictly at this value.
+                    All single logs and bulk approvals cap at 40 points.
                   </p>
                 </div>
 

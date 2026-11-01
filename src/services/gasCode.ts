@@ -18,7 +18,7 @@ const DEFAULT_CONFIG = {
   hoursRate: 1.0,
   clubName: 'National Beta Club',
   academicYear: '2026-2027',
-  schoolName: 'Westview High School'
+  schoolName: 'Grayson High School'
 };
 
 const PAGE_SIZE = 50;

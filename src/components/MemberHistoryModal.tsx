@@ -3,6 +3,7 @@ import { Member, Submission, AppConfig, MeetingPointAward, EventItem } from '../
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
+import { getActivityPointTotals } from '../utils/activityPointTotals';
 import { useToast } from '../context/ToastContext';
 import { X, Calendar, Clock, Award, CheckCircle2, AlertCircle, Clock3, Download, ExternalLink, User, ShieldCheck } from 'lucide-react';
 
@@ -45,6 +46,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
   );
   const meetingAwardPoints = memberMeetingAwards.reduce((sum, award) => sum + (award.points || 0), 0);
   const otherManualAdjustment = (Number(member.manualPointAdjustment) || 0) - meetingAwardPoints;
+  const masterPointTotals = getActivityPointTotals(member, memberSubs, memberMeetingAwards, events);
 
   const stats = useMemo(() => {
     let approvedPts = 0;
@@ -238,10 +240,35 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
               />
             </div>
 
+            <section aria-label="Master category points" className="space-y-2 border-t border-zinc-200 pt-3">
+              <p className="text-[11px] font-semibold text-zinc-700">Points by master category</p>
+              {([
+                { label: 'Beta-specific', points: masterPointTotals.betaSpecific, color: 'bg-emerald-600' },
+                { label: 'Non-Beta', points: masterPointTotals.nonBeta, color: 'bg-sky-700' }
+              ]).map(item => (
+                <div key={item.label} className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-zinc-700">{item.label}</span>
+                    <span className="text-zinc-600">{item.points.toFixed(1)} / {cap} pts</span>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-label={`${item.label} points`}
+                    aria-valuemin={0}
+                    aria-valuemax={cap}
+                    aria-valuenow={Math.min(item.points, cap)}
+                    className="h-2 w-full overflow-hidden rounded-full bg-zinc-200"
+                  >
+                    <div className={`h-full ${item.color} transition-[width]`} style={{ width: `${Math.max(0, Math.min(100, item.points / cap * 100))}%` }} />
+                  </div>
+                </div>
+              ))}
+            </section>
+
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-600">
               <span>Approved submission points: <strong>{stats.approvedPts.toFixed(1)}</strong></span>
               <span>Meeting credits: <strong>{meetingAwardPoints.toFixed(1)}</strong></span>
-              <span>Other manual adjustment: <strong>{otherManualAdjustment.toFixed(1)}</strong></span>
+              <span>Other manual adjustment (included in Beta-specific): <strong>{otherManualAdjustment.toFixed(1)}</strong></span>
             </div>
 
             {/* Breakdown stats */}

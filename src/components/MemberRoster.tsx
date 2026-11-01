@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, AppConfig } from '../types';
 import { BetaStorage } from '../services/storage';
+import { getUniqueMembers } from '../utils/memberDeduplicator';
 import { useToast } from '../context/ToastContext';
 import { 
   Users, 
@@ -66,6 +67,9 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
   const cap = config.pointCap || 40;
   const nearCapThreshold = cap * 0.75;
 
+  // Deduplicate members for safe rendering
+  const uniqueMembers = useMemo(() => getUniqueMembers(members), [members]);
+
   // Compute roster overview counts for quick filter pills
   const statusCounts = useMemo(() => {
     let cappedCount = 0;
@@ -73,7 +77,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
     let nearCapCount = 0;
     let noHoursCount = 0;
 
-    members.forEach(m => {
+    uniqueMembers.forEach(m => {
       const pts = m.totalPoints || 0;
       if (pts >= cap) {
         cappedCount++;
@@ -88,17 +92,17 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
     });
 
     return {
-      total: members.length,
+      total: uniqueMembers.length,
       capped: cappedCount,
       inProgress: inProgressCount,
       nearCap: nearCapCount,
       noHours: noHoursCount
     };
-  }, [members, cap, nearCapThreshold]);
+  }, [uniqueMembers, cap, nearCapThreshold]);
 
   // Filter and sort members
   const filteredMembers = useMemo(() => {
-    let result = [...members];
+    let result = [...uniqueMembers];
 
     // Grade filter
     if (gradeFilter !== 'ALL') {
@@ -162,7 +166,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
     }
 
     return result;
-  }, [members, gradeFilter, statusFilter, search, sortField, sortOrder, cap, nearCapThreshold]);
+  }, [uniqueMembers, gradeFilter, statusFilter, search, sortField, sortOrder, cap, nearCapThreshold]);
 
   const totalPages = Math.ceil(filteredMembers.length / pageSize) || 1;
   const paginatedMembers = useMemo(() => {

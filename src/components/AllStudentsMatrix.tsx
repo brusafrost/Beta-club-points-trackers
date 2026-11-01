@@ -1,17 +1,19 @@
 import React, { useMemo, useState } from 'react';
-import { Member, Submission, EventItem } from '../types';
+import { Member, Submission, EventItem, MeetingPointAward } from '../types';
 import { Search, Download, BarChart3 } from 'lucide-react';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
+import { getActivityPointTotals } from '../utils/activityPointTotals';
 
 interface Props {
   members: Member[];
   submissions: Submission[];
   events: EventItem[];
+  meetingPointAwards: MeetingPointAward[];
   isOfficer?: boolean;
   viewerMemberId?: string;
 }
 
-export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, isOfficer = false, viewerMemberId }) => {
+export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, meetingPointAwards, isOfficer = false, viewerMemberId }) => {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 25;
@@ -19,35 +21,36 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
   // Build map: studentEmail -> { eventName -> points }
   const { displayEvents, rows } = useMemo(() => {
     const approved = submissions.filter(s => s.status === 'Approved');
-    const eventSubs = approved.filter(s => !s.category.toLowerCase().startsWith('bonus:'));
-
-    // Include all events plus any submission-only categories
-    const submissionCats = Array.from(new Set(eventSubs.map(s => s.category)));
-    const extraCats = isOfficer ? submissionCats.filter(cat => !events.some(e => e.name === cat)) : [];
-    const allEvents = [...events.map(e => e.name), ...extraCats];
+    const allEvents = ['Beta-specific', 'Non-Beta'];
 
     const rows = members.map(m => {
       const key = m.studentId || m.email.toLowerCase().trim();
       const ownApprovedSubs = approved.filter(submission => submissionBelongsToMember(submission, m));
-      const studentEvents = ownApprovedSubs.filter(submission => !submission.category.toLowerCase().startsWith('bonus:'));
-      const eventPoints: Record<string, number> = {};
-      studentEvents.forEach(submission => {
-        eventPoints[submission.category] = (eventPoints[submission.category] || 0) + (submission.points || 0);
-      });
+      const pointTotals = getActivityPointTotals(m, approved, meetingPointAwards, events);
+      const eventPoints: Record<string, number> = {
+        'Beta-specific': pointTotals.betaSpecific,
+        'Non-Beta': pointTotals.nonBeta
+      };
       const cells = allEvents.map(ev => ({ event: ev, points: eventPoints[ev] || 0 }));
-      const totalServicePoints = Object.values(eventPoints).reduce((sum, points) => sum + points, 0);
+      const totalServicePoints = pointTotals.betaSpecific + pointTotals.nonBeta;
       const visibleEventTotal = cells.reduce((sum, cell) => sum + cell.points, 0);
       const eventTotal = isOfficer ? totalServicePoints : visibleEventTotal;
       const canSeePrivatePoints = isOfficer || key === viewerMemberId;
       const bonus = canSeePrivatePoints
         ? ownApprovedSubs.filter(submission => submission.category.toLowerCase().startsWith('bonus:')).reduce((sum, submission) => sum + (submission.points || 0), 0)
         : 0;
-      const adjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
-      return { member: m, cells, eventTotal, bonus, adjustment, total: totalServicePoints + bonus + adjustment };
+      const meetingAwardPoints = meetingPointAwards
+        .filter(award => award.memberId === m.id)
+        .reduce((sum, award) => sum + (award.points || 0), 0);
+      const adjustment = canSeePrivatePoints
+        ? (Number(m.manualPointAdjustment) || 0) - meetingAwardPoints
+        : 0;
+      const total = canSeePrivatePoints ? totalServicePoints + bonus : Number(m.totalPoints) || 0;
+      return { member: m, cells, eventTotal, bonus, adjustment, total };
     });
 
     return { displayEvents: allEvents, rows };
-  }, [members, submissions, events, isOfficer, viewerMemberId]);
+  }, [members, submissions, events, meetingPointAwards, isOfficer, viewerMemberId]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
@@ -84,8 +87,8 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
       ...(isOfficer ? [r.bonus.toFixed(1), r.adjustment.toFixed(1)] : [r.member.studentId === viewerMemberId || r.member.email.toLowerCase().trim() === viewerMemberId ? r.bonus.toFixed(1) : '', r.member.studentId === viewerMemberId || r.member.email.toLowerCase().trim() === viewerMemberId ? r.adjustment.toFixed(1) : '']),
       r.total.toFixed(1)
     ]);
-    if (isOfficer) headers.splice(headers.length - 1, 0, 'Bonus (not event)', 'Manual adjustment');
-    else headers.splice(headers.length - 1, 0, 'My bonus (not event)', 'My adjustment');
+    if (isOfficer) headers.splice(headers.length - 1, 0, 'Bonus (not event)', 'Manual adjustment (included in Beta-specific)');
+    else headers.splice(headers.length - 1, 0, 'My bonus (not event)', 'My adjustment (included in Beta-specific)');
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -171,7 +174,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
                 <th key={i} className="py-2 px-3 text-right min-w-[110px]">{ev}</th>
               ))}
               <th className="py-2 px-3 text-right min-w-[110px]">{isOfficer ? 'Bonus (not event)' : 'My bonus'}</th>
-              <th className="py-2 px-3 text-right min-w-[110px]">{isOfficer ? 'Manual adjustment' : 'My adjustment'}</th>
+              <th className="py-2 px-3 text-right min-w-[110px]">{isOfficer ? 'Adjustment (in Beta-specific)' : 'My adjustment (in Beta-specific)'}</th>
               <th className="py-2 px-3 text-right">Total</th>
             </tr>
           </thead>

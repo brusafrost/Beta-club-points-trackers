@@ -151,6 +151,7 @@ export default function App() {
               members={members}
               submissions={submissions}
               events={events}
+              meetingPointAwards={meetingPointAwards}
               config={config}
               isOfficer={session.isOfficer}
               viewerMemberId={currentMember?.studentId || currentMember?.email.toLowerCase().trim()}

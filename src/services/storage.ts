@@ -3,9 +3,12 @@ import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppCon
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { awardBulkMeetingPoints } from './bulkMeetingPoints';
+import { saveOfficerPointEntry } from './officerPointEntries';
+import { migrateLegacyManualPoints } from './manualPointMigration';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
 import { deleteEventCategory, updateEventCategory } from './eventCatalog';
+import { createBatchApprovalPlan } from '../utils/batchApprovalPlan';
 
 // Local cache
 let localMembers: Member[] = [];
@@ -15,15 +18,16 @@ let localMeetingPointAwards: MeetingPointAward[] = [];
 let localSubmissions: Submission[] = [];
 let localEvents: EventItem[] = [];
 let localOfficers: Officer[] = [];
+let manualPointMigrationStarted = false;
 let localConfig: AppConfig = {
-  pointCap: 50,
+  pointCap: 40,
   hoursRate: 1,
   betaHoursTarget: 5,
   nonBetaHoursTarget: 35,
   officerCode: 'beta4216',
   clubName: 'High School Beta Club',
   academicYear: '2026-2027',
-  schoolName: 'Anytown High School'
+  schoolName: 'Grayson High School'
 };
 const DEFAULT_OFFICER_CODE = 'beta4216';
 let onChangeCallback: (() => void) | null = null;
@@ -46,10 +50,20 @@ export class BetaStorage {
     // Listen to config
     onSnapshot(doc(db, 'config', 'main'), (snap) => {
       if (snap.exists()) {
-        localConfig = { ...localConfig, ...snap.data() } as AppConfig;
+        const savedConfig = snap.data();
+        const schoolName = savedConfig.schoolName === 'Anytown High School'
+          ? 'Grayson High School'
+          : savedConfig.schoolName || localConfig.schoolName;
+        localConfig = { ...localConfig, ...savedConfig, pointCap: 40, schoolName } as AppConfig;
+        const configUpdates: Partial<AppConfig> = {};
+        if (savedConfig.pointCap !== 40) configUpdates.pointCap = 40;
+        if (savedConfig.schoolName !== schoolName) configUpdates.schoolName = schoolName;
         if (localConfig.academicYear === '2023-2024') {
           localConfig = { ...localConfig, academicYear: '2026-2027' };
-          setDoc(doc(db, 'config', 'main'), { academicYear: '2026-2027' }, { merge: true });
+          configUpdates.academicYear = '2026-2027';
+        }
+        if (Object.keys(configUpdates).length > 0) {
+          setDoc(doc(db, 'config', 'main'), configUpdates, { merge: true });
         }
       } else {
         // Seed config
@@ -81,6 +95,14 @@ export class BetaStorage {
       localMeetingPointAwards.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       triggerChange();
     });
+
+    if (!manualPointMigrationStarted) {
+      manualPointMigrationStarted = true;
+      void migrateLegacyManualPoints(db).then(result => {
+        if (!result.success) console.error('Could not classify legacy manual point entries:', result.error);
+        else if (result.migrated > 0 || result.removedEvents > 0) triggerChange();
+      });
+    }
 
     // Listen to submissions
     onSnapshot(collection(db, 'submissions'), (snap) => {
@@ -124,7 +146,7 @@ export class BetaStorage {
 
   // ---- CONFIG ----
   public static updateConfig(newConfig: Partial<AppConfig>): AppConfig {
-    const updated = { ...localConfig, ...newConfig };
+    const updated = { ...localConfig, ...newConfig, pointCap: 40 };
     setDoc(doc(db, 'config', 'main'), updated);
     return updated;
   }
@@ -208,20 +230,38 @@ export class BetaStorage {
     if (!/^\d{9,10}$/.test(studentId.trim())) {
       return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
     }
-    if (localMembers.some(m => (m.studentId || '').toLowerCase() === normalizedStudentId.toLowerCase())) {
+    
+    // Check local cache for immediate feedback, but Firestore setDoc will handle the final safety
+    if (localMembers.some(m => (m.studentId || '').toUpperCase() === normalizedStudentId)) {
       return { success: false, error: 'Student ID already exists.' };
     }
     if (email.trim() && localMembers.some(m => m.email.toLowerCase() === email.toLowerCase())) {
       return { success: false, error: 'Email already exists.' };
     }
+
     const fullName = `${firstName} ${lastName}`.trim();
+    const docId = normalizedStudentId; // Use studentId as the document key for absolute uniqueness
+
     const newMember: Member = {
-      id: `mem-${Date.now()}`,
+      id: docId,
       firstName, lastName, name: fullName, email: email.trim().toLowerCase(),
       totalPoints: 0, gradeLevel, studentId: normalizedStudentId,
       hasPassword: !!password, createdAt: new Date().toISOString()
     };
-    await setDoc(doc(db, 'members', newMember.id), newMember);
+    
+    // Use { merge: true } to prevent accidental data loss if the document somehow existed
+    await setDoc(doc(db, 'members', docId), newMember, { merge: true });
+    
+    // Immediately log in the student
+    const session: AuthSession = { 
+      token: `tok-${Date.now()}`, 
+      email: newMember.email, 
+      isOfficer: false, 
+      memberId: newMember.id, 
+      name: newMember.name 
+    };
+    this.saveSession(session);
+    
     return { success: true, member: newMember };
   }
 
@@ -450,25 +490,14 @@ export class BetaStorage {
     return { success: true, actualPoints: actual };
   }
 
-  public static addOfficerPointsEntry(memberId: string, category: string, points: number, notes: string): { success: boolean; error?: string } {
+  public static async addOfficerPointsEntry(memberId: string, category: string, points: number, notes: string): Promise<{ success: boolean; error?: string }> {
     const member = this.getMemberById(memberId);
-    if (!member || points <= 0 || !category.trim()) return { success: false, error: 'Student, event, and positive points are required.' };
-    const submission: Submission = {
-      id: `officer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      studentName: member.name,
-      studentId: member.studentId,
-      studentEmail: member.email,
-      category: category.trim(),
-      hours: 0,
-      points: Math.round(points * 10) / 10,
-      date: new Date().toISOString().split('T')[0],
-      assignedTo: 'Officer',
-      proofUrl: '',
-      status: 'Approved',
-      timestamp: new Date().toISOString(),
-      officerNotes: notes.trim() || 'Entered by officer'
-    };
-    setDoc(doc(db, 'submissions', submission.id), submission);
+    if (!member) {
+      return { success: false, error: 'Student, event, and positive points are required.' };
+    }
+    const result = await saveOfficerPointEntry(db, member, category, points, notes);
+    if (!result.success || !result.submission) return { success: false, error: result.error };
+    this.log('Officer points added', member.name, `${result.submission.category}: ${result.submission.points.toFixed(1)} points.`);
     setTimeout(() => this.recalculateMemberPoints(member.studentId || member.email), 500);
     return { success: true };
   }
@@ -491,23 +520,32 @@ export class BetaStorage {
     return 0; // Async
   }
 
-  public static batchApproveAllPending(): { success: boolean; count: number; skipped: number } {
+  public static async batchApproveAllPending(): Promise<{ success: boolean; count: number; skipped: number; capped: number; error?: string }> {
     const pending = localSubmissions.filter(s => s.status === 'Pending');
-    const approvable = pending.filter(sub => sub.hours <= 0 || resolveServiceActivityType(sub, localEvents));
-    const skipped = pending.length - approvable.length;
+    const plan = createBatchApprovalPlan(pending, localMembers, localEvents, localConfig.pointCap);
+    if (plan.approvals.length === 0) {
+      return { success: true, count: 0, skipped: plan.skipped, capped: plan.capped };
+    }
     const batch = writeBatch(db);
-    approvable.forEach(sub => {
-      const ref = doc(db, 'submissions', sub.id);
-      const activityType = resolveServiceActivityType(sub, localEvents);
-      batch.update(ref, { status: 'Approved', ...(activityType ? { activityType } : {}) });
+    plan.approvals.forEach(approval => {
+      batch.update(doc(db, 'submissions', approval.submissionId), {
+        status: 'Approved',
+        points: approval.points,
+        ...(approval.activityType ? { activityType: approval.activityType } : {})
+      });
     });
-    if (approvable.length > 0) batch.commit().then(() => {
-      // Lazy recalculate
-      const identities = new Set(approvable.map(s => s.studentId || s.studentEmail));
-      identities.forEach(identity => this.recalculateMemberPoints(identity));
-    });
-    if (approvable.length > 0) this.log('Bulk approval', `${approvable.length} submissions`, `${skipped} unclassified service submissions left pending for officer type selection.`);
-    return { success: true, count: approvable.length, skipped };
+    try {
+      await batch.commit();
+      const affectedMembers = new Set(plan.approvals.map(approval => approval.memberId));
+      affectedMembers.forEach(memberId => {
+        const member = this.getMemberById(memberId);
+        if (member) this.recalculateMemberPoints(member.studentId || member.email);
+      });
+      this.log('Bulk approval', `${plan.approvals.length} submissions`, `${plan.skipped} unclassified or unmatched submissions left pending; ${plan.capped} approvals reduced to remain within the point cap.`);
+      return { success: true, count: plan.approvals.length, skipped: plan.skipped, capped: plan.capped };
+    } catch {
+      return { success: false, count: 0, skipped: pending.length, capped: 0, error: 'The batch could not be saved. No submissions were approved.' };
+    }
   }
 
   public static batchRejectAllPending(notes: string): { success: boolean; count: number } {

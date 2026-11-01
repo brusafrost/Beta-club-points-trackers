@@ -8,7 +8,7 @@ A modern, full-featured web portal for High School National Beta Club chapters. 
 
 - **Student Portal**:
   - Secure Member Registration and Sign In.
-  - Real-time progress bar toward the chapter point cap (e.g. 40 pts default).
+  - Real-time progress bar toward the fixed 40-point chapter cap.
   - Volunteer slip submission with activity category selection and proof image upload.
   - Interactive service history transcript with individual CSV export.
   - Officer inquiry messaging thread for questions regarding pending or adjusted submissions.
@@ -19,9 +19,10 @@ A modern, full-featured web portal for High School National Beta Club chapters. 
   - Point override and discretionary bonus point adjustment tools.
   - Complete chapter roster management with multi-field search and status filters (Cap Met, In Progress, Near Cap, Zero Hours).
   - Bulk roster import (CSV, tab-delimited sheets, or name lists).
-  - Bulk meeting point awards by student ID, with a reviewable recipient list and no attendance or event records.
+  - Bulk meeting point awards by student ID, with a reviewable recipient list and Beta-specific master-category totals.
+  - Bulk officer point entries from tab-separated or quoted CSV rows, classified as Beta-specific and reflected in student history and progress bars.
   - Audit-ready matrix cross-tabulation and CSV chapter exports.
-  - Custom category configuration, hour multipliers, and chapter point cap customization.
+  - Custom category configuration and hour multipliers; the chapter point cap is fixed at 40.
 
 ---
 
@@ -33,7 +34,11 @@ A modern, full-featured web portal for High School National Beta Club chapters. 
 4. Review matched students and the counts for IDs not found, ambiguous matches, invalid values, and duplicates. Matched students are selected by default; uncheck anyone who should not receive a point.
 5. Choose **Award 1 Point to Selected** and confirm the recipient count.
 
-The award updates only selected students' point totals and manual point adjustments. Each selected student gets an individual credit record in their student history showing the meeting label, one-point amount, date, and that the chapter officer awarded it directly to them. It does not create a submission, attendance record, or website event. The officer audit log records the meeting label and award count, not student names. You can rerun the same meeting label to award missed students; students who already have an individual receipt are skipped, so they cannot receive the same meeting point twice. Older awards made before individual receipts were available are blocked from retry until an officer reviews the old records.
+The award updates only selected students' point totals and manual point adjustments. Each selected student gets an individual credit record in their student history showing the meeting label, one-point amount, date, and that the chapter officer awarded it directly to them. Meeting credits count toward the Beta-specific point bar, but do not create a student event or add volunteer hours. The officer audit log records the meeting label and award count, not student names. You can rerun the same meeting label to award missed students; students who already have an individual receipt are skipped, so they cannot receive the same meeting point twice. Older awards made before individual receipts were available are blocked from retry until an officer reviews the old records.
+
+For **Bulk Point Entries With Student History**, paste one row per student in `student ID, points, event, optional note` format. Tab-separated rows copied from a spreadsheet and quoted CSV event names are supported. Event names are subcategories, not new shared event-catalog entries; manual point entries are classified under the Beta-specific master category. Invalid or failed rows remain in the text box for correction; successfully saved rows are removed.
+
+Students and officer transcript views show Beta-specific and Non-Beta point bars, plus separate approved-hour requirement bars. The 5-hour Beta-specific and 35-hour Non-Beta requirements must each be met independently; earning 40 or more Non-Beta hours does not replace the Beta-specific requirement. Manual point awards count as points only; they do not count as volunteer hours toward the 5-hour Beta-specific requirement.
 
 To verify the Firestore award transaction without touching production data, run `npm run test:bulk-award`. This requires Java and runs against a local Firebase Emulator using disposable test members.
 

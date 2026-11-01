@@ -4,6 +4,7 @@ import { BetaStorage } from '../services/storage';
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
+import { getActivityPointTotals } from '../utils/activityPointTotals';
 import { useToast } from '../context/ToastContext';
 import {
   Clock,
@@ -87,6 +88,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const approvedEventAndBonusPoints = approvedSubs.reduce((sum, s) => sum + (s.points || 0), 0);
   const approvedPoints = Math.max(0, approvedEventAndBonusPoints + (Number(member.manualPointAdjustment) || 0));
+  const masterPointTotals = getActivityPointTotals(member, approvedSubs, myMeetingPointAwards, events);
   const bonusPoints = approvedSubs
     .filter(s => s.category.toLowerCase().startsWith('bonus:'))
     .reduce((sum, s) => sum + (s.points || 0), 0);
@@ -114,17 +116,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   }, [mySubs, statusFilter, searchQuery]);
 
   // Category breakdown for student
-  const categoryMap: Record<string, { hours: number; points: number; count: number }> = {};
+  const categoryMap: Record<string, { master: string; label: string; hours: number; points: number; count: number }> = {};
   approvedSubs.forEach(s => {
     if (s.category.toLowerCase().startsWith('bonus:')) return;
     const cat = s.category || 'General';
-    if (!categoryMap[cat]) categoryMap[cat] = { hours: 0, points: 0, count: 0 };
-    categoryMap[cat].hours += s.hours || 0;
-    categoryMap[cat].points += s.points || 0;
-    categoryMap[cat].count += 1;
+    const type = resolveServiceActivityType(s, officialEvents);
+    const master = type === 'BETA' ? 'Beta-specific' : type === 'NONBETA' ? 'Non-Beta' : 'Needs classification';
+    const key = `${master}\u0000${cat}`;
+    if (!categoryMap[key]) categoryMap[key] = { master, label: cat, hours: 0, points: 0, count: 0 };
+    categoryMap[key].hours += s.hours || 0;
+    categoryMap[key].points += s.points || 0;
+    categoryMap[key].count += 1;
   });
-
-  const categoryList = Object.entries(categoryMap).sort((a, b) => b[1].points - a[1].points);
+  myMeetingPointAwards.forEach(award => {
+    const cat = award.meetingName || 'Beta meeting';
+    const key = `Beta-specific\u0000${cat}`;
+    if (!categoryMap[key]) categoryMap[key] = { master: 'Beta-specific', label: cat, hours: 0, points: 0, count: 0 };
+    categoryMap[key].points += award.points || 0;
+    categoryMap[key].count += 1;
+  });
+  const categoryList = Object.entries(categoryMap).sort((a, b) => a[1].master.localeCompare(b[1].master) || b[1].points - a[1].points);
   const eventPoints = categoryList.reduce((sum, [, stats]) => sum + stats.points, 0);
   const calendarDays = useMemo(() => {
     const now = new Date();
@@ -284,6 +295,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       </div>
 
       <section aria-label="Service hour requirements" className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <p className="md:col-span-2 text-[11px] text-zinc-600">
+          Both service-hour targets must be met separately. Non-Beta hours cannot replace the {config.betaHoursTarget ?? 5} Beta-specific hours.
+        </p>
         {([
           { label: 'Beta-specific', hours: approvedServiceHours.beta, target: config.betaHoursTarget ?? 5, color: 'bg-emerald-600' },
           { label: 'Non-Beta', hours: approvedServiceHours.nonBeta, target: config.nonBetaHoursTarget ?? 35, color: 'bg-sky-700' }
@@ -303,7 +317,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 aria-valuenow={Math.min(item.hours, item.target)}
                 className="h-2.5 overflow-hidden rounded-full bg-zinc-100"
               >
-                <div className={`h-full ${item.color} transition-[width]`} style={{ width: `${percent}%` }} />
+                <div className={`h-full ${item.color} transition-[width]`} style={{ width: `${Math.max(0, percent)}%` }} />
               </div>
             </div>
           );
@@ -313,6 +327,37 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {approvedServiceHours.unclassified.toFixed(1)} approved service hours are awaiting officer Beta/Non-Beta classification and are not included in either requirement yet.
           </p>
         )}
+      </section>
+
+      <section aria-label="Points by master category" className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-bold text-zinc-900">Points by Master Category</h2>
+          <p className="text-[11px] text-zinc-500">Each event or manual point entry is grouped under Beta-specific or Non-Beta. Manual adjustments and meeting points are included under Beta-specific. These point bars are separate from the service-hour requirements above.</p>
+        </div>
+        {([
+          { label: 'Beta-specific', points: masterPointTotals.betaSpecific, color: 'bg-emerald-600' },
+          { label: 'Non-Beta', points: masterPointTotals.nonBeta, color: 'bg-sky-700' }
+        ]).map(item => {
+          const percent = Math.min(100, item.points / cap * 100);
+          return (
+            <div key={item.label} className="space-y-1">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-semibold text-zinc-800">{item.label}</span>
+                <span className="font-mono text-zinc-600">{item.points.toFixed(1)} / {cap} pts</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label={`${item.label} points`}
+                aria-valuemin={0}
+                aria-valuemax={cap}
+                aria-valuenow={Math.min(item.points, cap)}
+                className="h-2.5 overflow-hidden rounded-full bg-zinc-100"
+              >
+                <div className={`h-full ${item.color} transition-[width]`} style={{ width: `${percent}%` }} />
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       {/* Main Student Sub-Tabs Navigation */}
@@ -495,21 +540,24 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {/* Category Breakdown Card */}
             <div className="bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
               <h2 className="text-base font-bold text-zinc-900 flex items-center justify-between">
-                <span>My Event Points</span>
+                <span>My Event Subcategories</span>
                 <span className="text-xs font-mono text-zinc-500 font-normal">{categoryList.length} Categories</span>
               </h2>
 
               {categoryList.length === 0 ? (
-                <p className="text-xs text-zinc-500 font-mono">No approved service categories yet.</p>
+                <p className="text-xs text-zinc-500 font-mono">No approved event subcategories or meeting points yet.</p>
               ) : (
                 <div className="space-y-3">
-                  {categoryList.map(([cat, stats]) => {
+                  {categoryList.map(([key, stats]) => {
                     const pct = Math.round((stats.points / (eventPoints || 1)) * 100);
 
                     return (
-                      <div key={cat} className="space-y-1 text-xs">
+                      <div key={key} className="space-y-1 text-xs">
                         <div className="flex justify-between font-mono">
-                          <span className="font-semibold text-zinc-800 truncate pr-2">{cat}</span>
+                          <span className="min-w-0 truncate pr-2">
+                            <span className="mr-1 text-[10px] uppercase text-zinc-500">{stats.master}</span>
+                            <span className="font-semibold text-zinc-800">{stats.label}</span>
+                          </span>
                           <span className="text-zinc-600 font-mono shrink-0">{stats.points.toFixed(1)} pts ({pct}%)</span>
                         </div>
                         <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden border border-zinc-200">
@@ -572,7 +620,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
           </div>
 
-          <AllStudentsMatrix members={allMembers} submissions={submissions} events={events} viewerMemberId={member.studentId || member.email.toLowerCase().trim()} />
+          <AllStudentsMatrix
+            members={allMembers}
+            submissions={submissions}
+            events={events}
+            meetingPointAwards={meetingPointAwards}
+            viewerMemberId={member.studentId || member.email.toLowerCase().trim()}
+          />
         </div>
       )}
 

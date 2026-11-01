@@ -89,7 +89,9 @@ export const DeepDiveCharts: React.FC<DeepDiveChartsProps> = ({
   const categoryStats = useMemo(() => {
     const map: Record<string, { key: string; name: string; hours: number; points: number; submissions: number; activityType: 'BETA' | 'NONBETA' | null }> = {};
 
-    approvedSubs.forEach(s => {
+    approvedSubs
+      .filter(s => s.hours > 0 && !s.category.toLowerCase().startsWith('bonus:'))
+      .forEach(s => {
       const cat = s.category || 'General Service';
       const activityType = resolveServiceActivityType(s, events);
       const key = `${cat}\u0000${activityType || 'UNCLASSIFIED'}`;

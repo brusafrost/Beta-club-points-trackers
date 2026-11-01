@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Member, Submission, EventItem, AppConfig } from '../types';
+import { Member, Submission, EventItem, AppConfig, MeetingPointAward } from '../types';
 import { useToast } from '../context/ToastContext';
+import { getActivityPointTotals } from '../utils/activityPointTotals';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { Table, Search, Filter, Download, ArrowUpDown, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 
@@ -8,6 +9,7 @@ interface PointsTrackerMatrixProps {
   members: Member[];
   submissions: Submission[];
   events: EventItem[];
+  meetingPointAwards: MeetingPointAward[];
   config: AppConfig;
   isOfficer?: boolean;
   viewerMemberId?: string;
@@ -17,6 +19,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   members,
   submissions,
   events,
+  meetingPointAwards,
   config,
   isOfficer = false,
   viewerMemberId
@@ -35,41 +38,41 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   // Build matrix data of student email -> event -> approved points
   const { displayEvents, filteredRows } = useMemo(() => {
     const approvedSubs = submissions.filter(s => s.status === 'Approved');
-    const eventSubs = approvedSubs.filter(s => !s.category.toLowerCase().startsWith('bonus:'));
-    const eventCategories = new Set(eventSubs.map(s => s.category));
-    const missingFromEvents = Array.from(eventCategories).filter(cat => !events.some(e => e.name === cat));
-    const extraEvents = isOfficer
-      ? missingFromEvents.map((cat, idx) => ({ id: `custom-${idx}-${cat.replace(/[^a-z0-9]+/ig,'-')}`, name: cat, type: 'NONBETA' as const, description: 'Submission-only category' }))
-      : [];
-
+    const displayEvents = [
+      { id: 'beta-specific', name: 'Beta-specific', type: 'BETA' as const, description: 'Master category' },
+      { id: 'non-beta', name: 'Non-Beta', type: 'NONBETA' as const, description: 'Master category' }
+    ];
     const activeEvents = eventFilter === 'ALL'
-      ? [...events, ...extraEvents]
-      : // if filter matches an event name or a submission-only category, include it
-        (events.find(e => e.name === eventFilter)
-          ? events.filter(e => e.name === eventFilter)
-          : extraEvents.filter(e => e.name === eventFilter));
+      ? displayEvents
+      : displayEvents.filter(event => event.name === eventFilter);
 
     let rows = members.map(m => {
       const key = m.studentId || m.email.toLowerCase().trim();
+      const pointTotals = getActivityPointTotals(m, approvedSubs, meetingPointAwards, events);
       const ownApprovedSubs = approvedSubs.filter(submission => submissionBelongsToMember(submission, m));
-      const studentEvents: Record<string, number> = {};
-      ownApprovedSubs
-        .filter(submission => !submission.category.toLowerCase().startsWith('bonus:'))
-        .forEach(submission => {
-          studentEvents[submission.category] = (studentEvents[submission.category] || 0) + (submission.points || 0);
-        });
+      const studentEvents: Record<string, number> = {
+        'Beta-specific': pointTotals.betaSpecific,
+        'Non-Beta': pointTotals.nonBeta
+      };
       const eventPointsTotal = Object.values(studentEvents).reduce((sum, points) => sum + points, 0);
       const canSeePrivatePoints = isOfficer || key === viewerMemberId;
       const bonusPoints = canSeePrivatePoints
         ? ownApprovedSubs.filter(submission => submission.category.toLowerCase().startsWith('bonus:')).reduce((sum, submission) => sum + (submission.points || 0), 0)
         : 0;
-      const manualAdjustment = canSeePrivatePoints ? Number(m.manualPointAdjustment) || 0 : 0;
+      const meetingAwardPoints = meetingPointAwards
+        .filter(award => award.memberId === m.id)
+        .reduce((sum, award) => sum + (award.points || 0), 0);
+      const manualAdjustment = canSeePrivatePoints
+        ? (Number(m.manualPointAdjustment) || 0) - meetingAwardPoints
+        : 0;
       return {
         ...m,
         eventPoints: studentEvents,
         bonusPoints,
         manualAdjustment,
-        totalPoints: eventPointsTotal + bonusPoints + manualAdjustment
+        totalPoints: canSeePrivatePoints
+          ? eventPointsTotal + bonusPoints
+          : Number(m.totalPoints) || 0
       };
     });
 
@@ -97,7 +100,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
     });
 
     return { displayEvents: activeEvents, filteredRows: rows };
-  }, [members, submissions, events, searchQuery, eventFilter, gradeFilter, sortField, sortOrder, isOfficer, viewerMemberId]);
+  }, [members, submissions, events, meetingPointAwards, searchQuery, eventFilter, gradeFilter, sortField, sortOrder, isOfficer, viewerMemberId]);
 
   const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
   const paginatedRows = useMemo(() => {
@@ -106,7 +109,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
   }, [filteredRows, page, pageSize]);
 
   const handleExportMatrixCSV = () => {
-    const headers = ['Student Name', ...(isOfficer ? ['Email', 'Student ID'] : []), 'Grade', ...displayEvents.map(e => `"${e.name.replace(/"/g, '""')}"`), 'Bonus (not event)', 'Manual adjustment', 'Total Points', 'Point Cap'];
+    const headers = ['Student Name', ...(isOfficer ? ['Email', 'Student ID'] : []), 'Grade', ...displayEvents.map(e => `"${e.name.replace(/"/g, '""')}"`), 'Bonus (not event)', 'Manual adjustment (included in Beta-specific)', 'Total Points', 'Point Cap'];
     const rows = filteredRows.map(row => {
       const eventCols = displayEvents.map(e => (row.eventPoints[e.name] ? row.eventPoints[e.name].toFixed(1) : '0.0'));
       return [
@@ -249,7 +252,7 @@ export const PointsTrackerMatrix: React.FC<PointsTrackerMatrixProps> = ({
                   </th>
                 ))}
                 <th className="py-3 px-3 min-w-[125px] text-right">{isOfficer ? 'Bonus (not event)' : 'My bonus'}</th>
-                <th className="py-3 px-3 min-w-[130px] text-right">{isOfficer ? 'Manual adjustment' : 'My adjustment'}</th>
+                <th className="py-3 px-3 min-w-[130px] text-right">{isOfficer ? 'Adjustment (in Beta-specific)' : 'My adjustment (in Beta-specific)'}</th>
                 <th className="py-3 px-4 text-right min-w-[120px]">
                   <button
                     type="button"
