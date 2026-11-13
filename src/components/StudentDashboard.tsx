@@ -37,6 +37,7 @@ interface StudentDashboardProps {
   events: EventItem[];
   config: AppConfig;
   studentMatrixData: {
+    members: Member[];
     submissions: Submission[];
     meetingPointAwards: MeetingPointAward[];
     oldTranscriptEntries: OldTranscriptEntry[];
@@ -71,7 +72,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [inquiryPrefill, setInquiryPrefill] = useState<string>('');
 
   const officers = BetaStorage.getOfficers();
-  const allMembers = BetaStorage.getMembers();
   const officialEvents = events;
 
   const mySubs = useMemo(() => {
@@ -655,7 +655,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           {studentMatrixError && <p role="alert" className="text-sm text-red-700">Could not load student point records: {studentMatrixError}</p>}
           {studentMatrixData && (
             <AllStudentsMatrix
-              members={allMembers}
+              members={studentMatrixData.members}
               submissions={studentMatrixData.submissions}
               events={events}
               meetingPointAwards={studentMatrixData.meetingPointAwards}

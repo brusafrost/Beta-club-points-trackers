@@ -83,10 +83,18 @@ async function run(): Promise<void> {
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     assert.deepEqual(
+      BetaStorage.getMembers().map(profile => profile.id),
+      [studentId],
+      'a student session must subscribe only to its own profile'
+    );
+    assert.deepEqual(
       BetaStorage.getSubmissions().map(submission => submission.id),
       [ownSubmissionRef.id],
       'a student submission listener must return only that student’s records'
     );
+
+    const matrixData = await BetaStorage.loadStudentMatrixData();
+    assert.equal(matrixData.members.length, 2, 'the full roster loads only when the student requests the matrix');
 
     const savedSubmission = await BetaStorage.addSubmission(
       expectedOriginalName,
@@ -127,7 +135,7 @@ async function run(): Promise<void> {
 
     BetaStorage.setSessionDataScope(null);
     assert.deepEqual(BetaStorage.getSubmissions(), [], 'logging out clears student-scoped submission data');
-    console.log('Student account emulator test passed: concurrent duplicate registration, safe existing-profile handling, targeted sign-in, and legacy duplicate detection.');
+    console.log('Student account emulator test passed: scoped profile and submission listeners, on-demand matrix loading, and confirmed submission/message writes.');
   } finally {
     BetaStorage.setSessionDataScope(null);
     await Promise.all([

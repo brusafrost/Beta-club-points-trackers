@@ -29,9 +29,12 @@ let submissionsUnsubscribe: (() => void) | null = null;
 let submissionsScope: string | null = null;
 let officerCollectionsUnsubscribes: (() => void)[] = [];
 let officerCollectionsEnabled = false;
+let memberUnsubscribe: (() => void) | null = null;
+let memberScope: string | null = null;
 let sessionCollectionsUnsubscribes: (() => void)[] = [];
 let sessionCollectionsEnabled = false;
 let studentMatrixDataPromise: Promise<{
+  members: Member[];
   submissions: Submission[];
   meetingPointAwards: MeetingPointAward[];
   oldTranscriptEntries: OldTranscriptEntry[];
@@ -98,16 +101,19 @@ export class BetaStorage {
   public static getAuditLogs(): AuditLog[] { return [...localAuditLogs]; }
   public static getMeetingPointAwards(): MeetingPointAward[] { return [...localMeetingPointAwards]; }
   public static loadStudentMatrixData(): Promise<{
+    members: Member[];
     submissions: Submission[];
     meetingPointAwards: MeetingPointAward[];
     oldTranscriptEntries: OldTranscriptEntry[];
   }> {
     if (!studentMatrixDataPromise) {
       studentMatrixDataPromise = Promise.all([
+        getDocs(collection(db, 'members')),
         getDocs(collection(db, 'submissions')),
         getDocs(collection(db, 'meetingPointAwards')),
         getDocs(collection(db, 'oldTranscriptEntries'))
-      ]).then(([submissions, meetingPointAwards, oldTranscriptEntries]) => ({
+      ]).then(([members, submissions, meetingPointAwards, oldTranscriptEntries]) => ({
+        members: members.docs.map(document => document.data() as Member),
         submissions: submissions.docs.map(document => document.data() as Submission),
         meetingPointAwards: meetingPointAwards.docs.map(document => document.data() as MeetingPointAward),
         oldTranscriptEntries: oldTranscriptEntries.docs.map(document => document.data() as OldTranscriptEntry)
@@ -126,14 +132,25 @@ export class BetaStorage {
     const isOfficer = session?.isOfficer === true;
     this.setTranscriptEntriesScope(session?.memberId, isOfficer);
 
+    const nextMemberScope = isOfficer ? 'officer' : session ? `member:${session.memberId}` : null;
+    if (nextMemberScope !== memberScope) {
+      memberUnsubscribe?.();
+      memberUnsubscribe = null;
+      memberScope = nextMemberScope;
+      localMembers = [];
+
+      if (session && !isOfficer && session.memberId) {
+        memberUnsubscribe = onSnapshot(doc(db, 'members', session.memberId), snap => {
+          localMembers = snap.exists() ? [snap.data() as Member] : [];
+          triggerChange();
+        });
+      }
+    }
+
     if (Boolean(session) !== sessionCollectionsEnabled) {
       if (session) {
         sessionCollectionsEnabled = true;
         sessionCollectionsUnsubscribes = [
-          onSnapshot(collection(db, 'members'), snap => {
-            localMembers = snap.docs.map(d => d.data() as Member);
-            triggerChange();
-          }),
           onSnapshot(collection(db, 'events'), snap => {
             localEvents = snap.docs.map(d => d.data() as EventItem);
             triggerChange();
@@ -147,7 +164,6 @@ export class BetaStorage {
         sessionCollectionsUnsubscribes.forEach(unsubscribe => unsubscribe());
         sessionCollectionsUnsubscribes = [];
         sessionCollectionsEnabled = false;
-        localMembers = [];
         localEvents = [];
         localOfficers = [];
       }
@@ -211,6 +227,10 @@ export class BetaStorage {
     if (isOfficer && !officerCollectionsEnabled) {
       officerCollectionsEnabled = true;
       officerCollectionsUnsubscribes = [
+        onSnapshot(collection(db, 'members'), snap => {
+          localMembers = snap.docs.map(d => d.data() as Member);
+          triggerChange();
+        }),
         onSnapshot(collection(db, 'deletedMembers'), snap => {
           localDeletedMembers = snap.docs.map(d => d.data() as DeletedMember);
           localDeletedMembers.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
@@ -226,6 +246,7 @@ export class BetaStorage {
       officerCollectionsUnsubscribes.forEach(unsubscribe => unsubscribe());
       officerCollectionsUnsubscribes = [];
       officerCollectionsEnabled = false;
+      localMembers = [];
       localDeletedMembers = [];
       localAuditLogs = [];
     }
