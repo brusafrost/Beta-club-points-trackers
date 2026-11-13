@@ -28,6 +28,8 @@ jobs:
         run: npm install
       - name: Build
         run: npm run build
+      - name: Include custom domain
+        run: cp CNAME dist/CNAME
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact

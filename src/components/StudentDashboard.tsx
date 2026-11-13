@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Member, Submission, AppConfig, MeetingPointAward, EventItem } from '../types';
+import { Member, Submission, AppConfig, MeetingPointAward, EventItem, OldTranscriptEntry } from '../types';
 import { BetaStorage } from '../services/storage';
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
@@ -36,6 +36,14 @@ interface StudentDashboardProps {
   meetingPointAwards: MeetingPointAward[];
   events: EventItem[];
   config: AppConfig;
+  studentMatrixData: {
+    submissions: Submission[];
+    meetingPointAwards: MeetingPointAward[];
+    oldTranscriptEntries: OldTranscriptEntry[];
+  } | null;
+  isLoadingStudentMatrix: boolean;
+  studentMatrixError: string | null;
+  onLoadStudentMatrix: () => void;
   onNavigateToSubmit: () => void;
   onViewProof: (sub: Submission) => void;
   onRefreshData?: () => void;
@@ -47,6 +55,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   meetingPointAwards,
   events,
   config,
+  studentMatrixData,
+  isLoadingStudentMatrix,
+  studentMatrixError,
+  onLoadStudentMatrix,
   onNavigateToSubmit,
   onViewProof,
   onRefreshData
@@ -70,6 +82,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     () => meetingPointAwards.filter(award => award.memberId === member.id),
     [meetingPointAwards, member.id]
   );
+  const myOldTranscriptEntries = useMemo(
+    () => BetaStorage.getOldTranscriptEntriesForMember(member.id),
+    [member.id]
+  );
 
   const approvedSubs = useMemo(() => mySubs.filter(s => s.status === 'Approved'), [mySubs]);
   const pendingSubs = useMemo(() => mySubs.filter(s => s.status === 'Pending'), [mySubs]);
@@ -87,7 +103,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   }, [approvedSubs, officialEvents]);
 
   const approvedEventAndBonusPoints = approvedSubs.reduce((sum, s) => sum + (s.points || 0), 0);
-  const approvedPoints = Math.max(0, approvedEventAndBonusPoints + (Number(member.manualPointAdjustment) || 0));
+  const oldTranscriptCarryoverPoints = myOldTranscriptEntries.reduce((sum, entry) => sum + (entry.points || 0), 0);
+  const approvedPoints = Math.max(0, approvedEventAndBonusPoints + (Number(member.manualPointAdjustment) || 0) + oldTranscriptCarryoverPoints);
   const masterPointTotals = getActivityPointTotals(member, approvedSubs, myMeetingPointAwards, events);
   const bonusPoints = approvedSubs
     .filter(s => s.category.toLowerCase().startsWith('bonus:'))
@@ -175,6 +192,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       `"${award.awardedBy.replace(/"/g, '""')}"`,
       '""',
       '"Awarded directly to this student"'
+    ]));
+    rows.push(...myOldTranscriptEntries.map(entry => [
+      entry.id,
+      `"Previous year carryover: ${entry.category.replace(/"/g, '""')}"`,
+      entry.sourceYear,
+      0,
+      entry.points.toFixed(1),
+      'Approved',
+      '"Chapter officer"',
+      '""',
+      `"Imported from previous transcript for ${entry.sourceYear}"`
     ]));
     const otherManualAdjustment = (Number(member.manualPointAdjustment) || 0) - myMeetingPointAwards.reduce((sum, award) => sum + (award.points || 0), 0);
     if (Math.abs(otherManualAdjustment) > 0.05) {
@@ -393,7 +421,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveTab('students')}
+            onClick={() => {
+              setActiveTab('students');
+              onLoadStudentMatrix();
+            }}
               className={`min-h-11 px-3 sm:px-4 py-2 rounded-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'students'
                 ? 'bg-white text-zinc-900 shadow-xs'
@@ -620,13 +651,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <p className="text-xs text-zinc-500 font-mono">Events shown as columns; approved points per event listed per student.</p>
           </div>
 
-          <AllStudentsMatrix
-            members={allMembers}
-            submissions={submissions}
-            events={events}
-            meetingPointAwards={meetingPointAwards}
-            viewerMemberId={member.studentId || member.email.toLowerCase().trim()}
-          />
+          {isLoadingStudentMatrix && <p className="text-sm text-zinc-500">Loading student point records...</p>}
+          {studentMatrixError && <p role="alert" className="text-sm text-red-700">Could not load student point records: {studentMatrixError}</p>}
+          {studentMatrixData && (
+            <AllStudentsMatrix
+              members={allMembers}
+              submissions={studentMatrixData.submissions}
+              events={events}
+              meetingPointAwards={studentMatrixData.meetingPointAwards}
+              oldTranscriptEntries={studentMatrixData.oldTranscriptEntries}
+              viewerMemberId={member.studentId || member.email.toLowerCase().trim()}
+            />
+          )}
         </div>
       )}
 
@@ -750,6 +786,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     <div className="flex items-center justify-between gap-4 sm:justify-end">
                       <span className="text-xs font-mono text-zinc-500">{formatDate(award.timestamp)}</span>
                       <span className="shrink-0 text-sm font-bold text-emerald-800">+{award.points.toFixed(1)} pt</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {myOldTranscriptEntries.length > 0 && (
+            <section aria-labelledby="old-transcript-heading" className="space-y-3 border-t border-zinc-100 pt-5">
+              <div>
+                <h3 id="old-transcript-heading" className="text-sm font-bold text-zinc-900">Previous Year History</h3>
+                <p className="text-xs text-zinc-500 font-mono">Old transcript rows carried over from a prior year and included in your current point progress.</p>
+              </div>
+              <div className="space-y-2">
+                {myOldTranscriptEntries.map(entry => (
+                  <div key={entry.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-violet-700" />
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-900">{entry.category}</p>
+                        <p className="text-xs text-zinc-600">Imported from {entry.sourceYear} and tied to your transcript history.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <span className="text-xs font-mono text-zinc-500">{entry.sourceYear}</span>
+                      <span className="shrink-0 text-sm font-bold text-violet-800">+{entry.points.toFixed(1)} pts</span>
                     </div>
                   </div>
                 ))}

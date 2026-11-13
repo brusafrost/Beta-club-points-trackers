@@ -214,6 +214,11 @@ async function run(): Promise<void> {
       { betaSpecific: 4, nonBeta: 0 },
       'unitemized manual point adjustments are included in the Beta-specific total'
     );
+    assert.deepEqual(
+      getActivityPointTotals({ ...totalsTestMember, manualPointAdjustment: 7 }, [], [], []),
+      { betaSpecific: 5, nonBeta: 2 },
+      'Beta-specific points above five transfer to Non-Beta'
+    );
 
     const firstSaved = await getDoc(memberRefs[0]);
     const secondSaved = await getDoc(memberRefs[1]);

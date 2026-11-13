@@ -6,6 +6,7 @@ import { formatDate, formatDateTime, formatFriendlyTimestamp } from '../utils/da
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
 import { parseBulkPointEntries } from '../utils/bulkPointEntryParser';
+import { parseOldTranscriptImportText } from '../utils/oldTranscriptImportParser';
 import { ProofImageStore } from '../services/imageStore';
 import { useToast } from '../context/ToastContext';
 import {
@@ -117,6 +118,9 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const [meetingPointLabel, setMeetingPointLabel] = useState<string>('');
   const [excludedMeetingPointMemberIds, setExcludedMeetingPointMemberIds] = useState<Set<string>>(() => new Set());
   const [isAwardingMeetingPoints, setIsAwardingMeetingPoints] = useState<boolean>(false);
+  const [oldTranscriptText, setOldTranscriptText] = useState<string>('');
+  const [oldTranscriptYear, setOldTranscriptYear] = useState<string>('2024-2025');
+  const [isImportingOldTranscript, setIsImportingOldTranscript] = useState<boolean>(false);
 
   // Settings
   const [editRate, setEditRate] = useState<string>(String(config.hoursRate || 1.0));
@@ -181,6 +185,10 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const selectedMeetingPointMembers = useMemo(
     () => meetingPointPreview.matched.filter(member => !excludedMeetingPointMemberIds.has(member.id)),
     [meetingPointPreview, excludedMeetingPointMemberIds]
+  );
+  const oldTranscriptPreview = useMemo(
+    () => parseOldTranscriptImportText(oldTranscriptText, oldTranscriptYear),
+    [oldTranscriptText, oldTranscriptYear]
   );
   const unlistedSubmissionCategories = useMemo(() => {
     const officialCategories = new Set(events.map(event => event.name.trim().toLowerCase()));
@@ -469,6 +477,8 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
   const handleBulkPoints = async () => {
     const parsed = parseBulkPointEntries(bulkPointsText);
     let added = 0;
+    let skipped = 0;
+    let duplicates = 0;
     const failedLines = [...parsed.invalidLines];
     const failureReasons: string[] = [];
     const memberById = new Map<string, Member[]>();
@@ -476,9 +486,28 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       const studentId = (member.studentId || '').trim();
       if (studentId) memberById.set(studentId, [...(memberById.get(studentId) || []), member]);
     });
+    const seenInBatch = new Set<string>();
 
     setIsSavingBulkPoints(true);
     for (const entry of parsed.entries) {
+      const normalizedKey = `${entry.studentId}|${entry.eventName.trim().toLowerCase()}|${Number(entry.points).toFixed(1)}`;
+      if (seenInBatch.has(normalizedKey)) {
+        duplicates++;
+        continue;
+      }
+      seenInBatch.add(normalizedKey);
+
+      const alreadyExists = submissions.some(sub =>
+        sub.studentId === entry.studentId &&
+        sub.category.trim().toLowerCase() === entry.eventName.trim().toLowerCase() &&
+        Number(sub.points || 0) === Number(entry.points) &&
+        sub.status !== 'Rejected'
+      );
+      if (alreadyExists) {
+        skipped++;
+        continue;
+      }
+
       const matchingMembers = memberById.get(entry.studentId) || [];
       const member = matchingMembers.length === 1 ? matchingMembers[0] : undefined;
       if (!member) {
@@ -499,14 +528,16 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       }
     }
     setIsSavingBulkPoints(false);
-    setBulkPointsText(failedLines.map(item => item.raw).join('\n'));
+    const remainingLines = failedLines.map(item => item.raw).join('\n');
+    setBulkPointsText(remainingLines);
 
-    const skipped = failedLines.length;
+    const totalSkipped = skipped + duplicates;
+    const summary = `${added} new entries saved${totalSkipped ? `; ${totalSkipped} rows skipped as already matched or duplicates` : ''}${failedLines.length ? `; ${failedLines.length} invalid lines remain in the box.` : '.'}`;
     if (added > 0) onRefresh();
     showToast({
-      title: skipped ? 'Bulk Points Partially Saved' : 'Bulk Points Saved',
-      message: `${added} entries saved${skipped ? `; ${skipped} lines remain in the box. ${failureReasons[0] || 'Check the row format and student ID.'}` : '.'}`,
-      type: skipped ? 'warning' : 'success'
+      title: failedLines.length || totalSkipped ? 'Bulk Points Saved with Review' : 'Bulk Points Saved',
+      message: summary,
+      type: failedLines.length || totalSkipped ? 'warning' : 'success'
     });
   };
 
@@ -533,6 +564,49 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     setMeetingPointLabel('');
     setExcludedMeetingPointMemberIds(new Set());
     onRefresh();
+  };
+
+  const handleImportOldTranscript = async () => {
+    if (!oldTranscriptText.trim()) {
+      showToast({ title: 'Nothing to import', message: 'Paste the previous-year transcript rows before importing.', type: 'warning' });
+      return;
+    }
+
+    setIsImportingOldTranscript(true);
+    try {
+      const result = await BetaStorage.importOldTranscriptEntries(oldTranscriptText, oldTranscriptYear);
+
+      if (!result.success) {
+        showToast({ title: 'Import Failed', message: result.error || 'Old transcript rows could not be saved.', type: 'error' });
+        return;
+      }
+
+      if (result.saved === 0 && result.review === 0 && result.duplicate === 0) {
+        showToast({ title: 'No new records saved', message: 'The pasted data did not contain any importable transcript rows.', type: 'warning' });
+        return;
+      }
+
+      const reviewMsg = result.review > 0 ? ` ${result.review} rows are waiting for manual matching.` : '';
+      const duplicateMsg = result.duplicate > 0 ? ` ${result.duplicate} duplicates or already-matched rows were skipped.` : '';
+      showToast({
+        title: 'Old Transcript Imported',
+        message: `Saved ${result.saved} carryover records.${reviewMsg}${duplicateMsg}`,
+        type: result.review > 0 || result.duplicate > 0 ? 'warning' : 'success'
+      });
+
+      if (result.saved > 0) {
+        setOldTranscriptText('');
+        onRefresh();
+      }
+    } catch (error) {
+      showToast({
+        title: 'Import Failed',
+        message: error instanceof Error ? error.message : 'Old transcript rows could not be saved.',
+        type: 'error'
+      });
+    } finally {
+      setIsImportingOldTranscript(false);
+    }
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -672,52 +746,54 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
     <div className="space-y-5 animate-in fade-in duration-200">
       
       {/* Top Banner & Tab Navigation */}
-      <div className="bg-zinc-950 text-white rounded-2xl p-5 sm:p-6 border border-zinc-800 shadow-lg flex flex-col gap-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-md bg-emerald-400 text-zinc-950 text-[11px] font-mono font-bold uppercase tracking-wider">
-              Officer Portal
-            </span>
-            <span className="text-xs text-zinc-400 font-mono">
-              {config.schoolName} &bull; {members.length} Registered Members
-            </span>
+      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-zinc-200 shadow-xs flex flex-col gap-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-md bg-zinc-900 text-white text-[11px] font-mono font-bold uppercase tracking-wider">
+                Officer Portal
+              </span>
+              <span className="text-xs text-zinc-500 font-mono">
+                {config.schoolName} &bull; {members.length} members
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-2 text-zinc-900">
+              Service Hour Approvals & Chapter Management
+            </h1>
+            <p className="text-xs text-zinc-500 font-mono mt-1">Review submissions, maintain the roster, and keep chapter records current.</p>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-2">
-            Service Hour Approvals & Chapter Management
-          </h1>
-          <p className="text-xs text-zinc-400 font-mono mt-1">Review submissions, maintain the roster, and keep chapter records current.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2 max-w-lg">
-          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-zinc-400">Needs review</div>
-            <div className="text-lg font-bold text-amber-300 font-mono">{pendingSubs.length}</div>
+          <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-zinc-500">Needs review</div>
+            <div className="text-lg font-bold text-zinc-900 font-mono">{pendingSubs.length}</div>
           </div>
-          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-zinc-400">Approved</div>
-            <div className="text-lg font-bold text-emerald-300 font-mono">{activeApprovedSubs.length}</div>
+          <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-zinc-500">Approved</div>
+            <div className="text-lg font-bold text-zinc-900 font-mono">{activeApprovedSubs.length}</div>
           </div>
-          <div className="rounded-xl bg-white/10 border border-white/10 px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-zinc-400">Events</div>
-            <div className="text-lg font-bold font-mono">{events.length}</div>
+          <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-zinc-500">Events</div>
+            <div className="text-lg font-bold text-zinc-900 font-mono">{events.length}</div>
           </div>
         </div>
 
-        {/* 4 Main Tabs */}
+        {/* Main Tabs */}
         <div className="flex w-full bg-zinc-100 p-1 rounded-xl border border-zinc-200 text-xs font-semibold overflow-x-auto shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('inbox')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'inbox'
-                ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200'
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
             <span>Review Queue</span>
             {pendingSubs.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px] font-mono font-bold">
+              <span className="ml-1 px-1.5 py-0.2 bg-zinc-200 text-zinc-900 rounded-full text-[10px] font-mono font-bold">
                 {pendingSubs.length}
               </span>
             )}
@@ -728,7 +804,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             onClick={() => setActiveTab('history')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'history'
-                ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200'
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
@@ -741,7 +817,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             onClick={() => setActiveTab('students')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'students'
-                ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200'
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
@@ -753,7 +829,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             type="button"
             onClick={() => setActiveTab('roster')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'roster' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-600 hover:text-zinc-900'
+              activeTab === 'roster' ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200' : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
             <UserCheck className="w-3.5 h-3.5" />
@@ -764,14 +840,14 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             type="button"
             onClick={() => setActiveTab('deleted')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'deleted' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-600 hover:text-zinc-900'
+              activeTab === 'deleted' ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200' : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
             <Archive className="w-3.5 h-3.5" />
             <span>Deleted Members ({BetaStorage.getDeletedMembers().length})</span>
           </button>
 
-          <button type="button" onClick={() => setActiveTab('audit')} className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'audit' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-600 hover:text-zinc-900'}`}>
+          <button type="button" onClick={() => setActiveTab('audit')} className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'audit' ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200' : 'text-zinc-600 hover:text-zinc-900'}`}>
             <History className="w-3.5 h-3.5" />
             <span>Audit Log ({BetaStorage.getAuditLogs().length})</span>
           </button>
@@ -781,7 +857,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             onClick={() => setActiveTab('tools')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'tools'
-                ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200'
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
@@ -794,7 +870,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
             onClick={() => setActiveTab('settings')}
             className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'settings'
-                ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                ? 'bg-white text-zinc-900 shadow-xs font-bold border border-zinc-200'
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
@@ -1599,6 +1675,49 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
               disabled={!meetingPointLabel.trim() || selectedMeetingPointMembers.length === 0 || isAwardingMeetingPoints}
               className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-xl text-xs font-semibold"
             >{isAwardingMeetingPoints ? 'Saving...' : `Award 1 Point to ${selectedMeetingPointMembers.length} Selected`}</button>
+          </div>
+
+          <div className="lg:col-span-12 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900">Old Transcript / Previous Year History Upload</h2>
+              <p className="text-xs text-zinc-500 font-mono">These rows are stored as a separate carryover record and never treated as a live service submission. The website keeps the main spreadsheet or Google Sheet as a reporting export, not the source of truth.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1 md:col-span-1">
+                <label htmlFor="old-transcript-year" className="text-xs font-semibold text-zinc-700">Transcript Year</label>
+                <input
+                  id="old-transcript-year"
+                  type="text"
+                  value={oldTranscriptYear}
+                  onChange={e => setOldTranscriptYear(e.target.value)}
+                  placeholder="2024-2025"
+                  className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <label htmlFor="old-transcript-rows" className="text-xs font-semibold text-zinc-700">Previous Transcript Rows</label>
+                <textarea
+                  id="old-transcript-rows"
+                  value={oldTranscriptText}
+                  onChange={e => setOldTranscriptText(e.target.value)}
+                  placeholder={'123456789\t4.5\tPrevious Year Carryover\t2024-2025\n987654321, 3.0, Summer Service Credit, 2024-2025'}
+                  rows={4}
+                  className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-900 focus:outline-hidden focus:border-zinc-500"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-lg">Saved: {oldTranscriptPreview.summary.saved}</div>
+              <div className="p-2.5 bg-amber-50 text-amber-800 rounded-lg">Review: {oldTranscriptPreview.summary.review}</div>
+              <div className="p-2.5 bg-zinc-100 text-zinc-700 rounded-lg">Duplicates: {oldTranscriptPreview.summary.duplicate}</div>
+              <div className="p-2.5 bg-violet-50 text-violet-800 rounded-lg">Rows: {oldTranscriptPreview.summary.total}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleImportOldTranscript()}
+              disabled={!oldTranscriptText.trim() || isImportingOldTranscript}
+              className="px-4 py-2 bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white rounded-xl text-xs font-semibold"
+            >{isImportingOldTranscript ? 'Importing...' : 'Import Carryover Records'}</button>
           </div>
 
           <div className="lg:col-span-12 bg-white rounded-2xl p-6 border border-zinc-200 shadow-xs space-y-4">

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Member, Submission, AppConfig, MeetingPointAward, EventItem } from '../types';
+import { BetaStorage } from '../services/storage';
 import { formatDate } from '../utils/dateFormatter';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { resolveServiceActivityType } from '../utils/serviceActivityType';
@@ -44,7 +45,12 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
     () => meetingPointAwards.filter(award => award.memberId === member.id),
     [meetingPointAwards, member.id]
   );
+  const memberOldTranscriptEntries = useMemo(
+    () => BetaStorage.getOldTranscriptEntriesForMember(member.id),
+    [member.id]
+  );
   const meetingAwardPoints = memberMeetingAwards.reduce((sum, award) => sum + (award.points || 0), 0);
+  const oldTranscriptPoints = memberOldTranscriptEntries.reduce((sum, entry) => sum + (entry.points || 0), 0);
   const otherManualAdjustment = (Number(member.manualPointAdjustment) || 0) - meetingAwardPoints;
   const masterPointTotals = getActivityPointTotals(member, memberSubs, memberMeetingAwards, events);
 
@@ -93,8 +99,8 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
     };
   }, [memberSubs, events]);
 
-  const progressPercent = Math.min(100, Math.round(((member.totalPoints || 0) / cap) * 100));
-  const isCapped = (member.totalPoints || 0) >= cap;
+  const progressPercent = Math.min(100, Math.round((((member.totalPoints || 0) + oldTranscriptPoints) / cap) * 100));
+  const isCapped = ((member.totalPoints || 0) + oldTranscriptPoints) >= cap;
 
   const exportStudentHistoryCSV = () => {
     const headers = ['Record ID', 'Service Date', 'Activity / Adjustment', 'Hours', 'Points', 'Status', 'Reviewer', 'Student Comments', 'Officer Notes', 'Timestamp'];
@@ -121,6 +127,18 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
       '""',
       '"Awarded directly to this student"',
       award.timestamp
+    ]));
+    rows.push(...memberOldTranscriptEntries.map(entry => [
+      entry.id,
+      entry.sourceYear,
+      `"Previous year carryover: ${entry.category.replace(/"/g, '""')}"`,
+      0,
+      entry.points.toFixed(1),
+      'Approved',
+      '"Chapter officer"',
+      '""',
+      `"Imported from previous transcript for ${entry.sourceYear}"`,
+      entry.importedAt
     ]));
     if (Math.abs(otherManualAdjustment) > 0.05) {
       rows.push([
@@ -221,7 +239,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
               <div>
                 <span className="text-zinc-500 text-xs">Total Points</span>
                 <div className="text-xl font-bold text-zinc-900 mt-0.5">
-                  {(member.totalPoints || 0).toFixed(1)} <span className="text-xs font-normal text-zinc-400">/ {cap} pts</span>
+                  {(((member.totalPoints || 0) + oldTranscriptPoints)).toFixed(1)} <span className="text-xs font-normal text-zinc-400">/ {cap} pts</span>
                 </div>
               </div>
               <div className="text-right">
@@ -268,6 +286,7 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-600">
               <span>Approved submission points: <strong>{stats.approvedPts.toFixed(1)}</strong></span>
               <span>Meeting credits: <strong>{meetingAwardPoints.toFixed(1)}</strong></span>
+              <span>Previous transcript carryover: <strong className="text-violet-700">{oldTranscriptPoints.toFixed(1)}</strong></span>
               <span>Other manual adjustment (included in Beta-specific): <strong>{otherManualAdjustment.toFixed(1)}</strong></span>
             </div>
 
@@ -311,6 +330,23 @@ export const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
                       <p className="text-zinc-600">Awarded directly by a chapter officer on {formatDate(award.timestamp)}.</p>
                     </div>
                     <strong className="shrink-0 text-emerald-800">+{award.points.toFixed(1)} pts</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {memberOldTranscriptEntries.length > 0 && (
+            <section className="space-y-3">
+              <h3 className="font-bold text-sm text-zinc-900">Previous Year History ({memberOldTranscriptEntries.length})</h3>
+              <div className="space-y-2">
+                {memberOldTranscriptEntries.map(entry => (
+                  <div key={entry.id} className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-zinc-900">{entry.category}</p>
+                      <p className="text-zinc-600">Imported from {entry.sourceYear} and included in current point totals.</p>
+                    </div>
+                    <strong className="shrink-0 text-violet-800">+{entry.points.toFixed(1)} pts</strong>
                   </div>
                 ))}
               </div>

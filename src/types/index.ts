@@ -34,6 +34,20 @@ export interface MeetingPointAward {
   timestamp: string;
 }
 
+export interface OldTranscriptEntry {
+  id: string;
+  memberId: string;
+  studentId?: string;
+  studentName: string;
+  sourceYear: string;
+  category: string;
+  points: number;
+  notes?: string;
+  importedAt: string;
+  status: 'matched' | 'review';
+  matchedBy: 'studentId' | 'manual' | 'name';
+}
+
 export type ServiceActivityType = 'BETA' | 'NONBETA';
 
 export type SubmissionStatus = 'Pending' | 'Approved' | 'Rejected';

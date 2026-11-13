@@ -1,20 +1,20 @@
 # Beta Club Service Points & Hours Tracker
 
-A modern, full-featured web portal for High School National Beta Club chapters. Allows students to log volunteer service hours, attach proof slips with offline/IndexedDB caching, track real-time progress toward chapter point caps, and enables chapter officers/advisors to review, batch-approve, manage rosters, and export audit-ready CSV transcripts.
+A web portal for High School National Beta Club chapters. Students can log volunteer service hours and track progress; chapter officers/advisors can review submissions, manage rosters, and export transcripts. Read the security and Firestore usage notes before deploying this client-side application with real student data.
 
 ---
 
 ## Key Features
 
 - **Student Portal**:
-  - Secure Member Registration and Sign In.
+  - Student ID-based Member Registration and Sign In.
   - Real-time progress bar toward the fixed 40-point chapter cap.
   - Volunteer slip submission with activity category selection and proof image upload.
   - Interactive service history transcript with individual CSV export.
   - Officer inquiry messaging thread for questions regarding pending or adjusted submissions.
 
 - **Officer & Advisor Portal**:
-  - Master passcode protection (`beta4216` default, customizable in Chapter Settings).
+  - Officer dashboard passcode prompt (`beta4216` default, customizable in Chapter Settings; see the security note below).
   - One-click **Batch Approve All** or individual slip verification with proof modal inspection.
   - Point override and discretionary bonus point adjustment tools.
   - Complete chapter roster management with multi-field search and status filters (Cap Met, In Progress, Near Cap, Zero Hours).
@@ -23,6 +23,26 @@ A modern, full-featured web portal for High School National Beta Club chapters. 
   - Bulk officer point entries from tab-separated or quoted CSV rows, classified as Beta-specific and reflected in student history and progress bars.
   - Audit-ready matrix cross-tabulation and CSV chapter exports.
   - Custom category configuration and hour multipliers; the chapter point cap is fixed at 40.
+
+---
+
+## Student Account Sign-In
+
+Students sign in with their 9- or 10-digit student ID. Student IDs are identifiers, not verified credentials: password authentication and password resets are not implemented. Do not treat this sign-in flow as account security.
+
+Registration checks the roster and transactionally creates a profile whose Firestore document ID is the student ID. Concurrent registrations for that ID cannot overwrite the winning profile. Sign-in queries for that ID and reports an error if multiple profiles already match.
+
+### Resolving Existing Duplicate Profiles
+
+When sign-in reports multiple profiles, an officer should review every active roster entry with that student ID and compare its submission history before taking action. Keep the profile with the verified hours/points. Remove only confirmed-empty duplicates through the roster; removal archives the profile and deletes all submissions linked to it. The archived profile can be restored from **Officer Portal → Deleted Members**, but deleted submissions are not restored by that action. Verify the retained student's history after cleanup, then have the student sign in again.
+
+### Firestore Usage and Security
+
+- Student/officer sign-in does not write to Firestore. A successful new student registration writes one member document; a duplicate registration is rejected without creating or replacing a profile.
+- The account lookup uses a targeted query, but it does **not** eliminate the app's broader reads: `BetaStorage.initialize()` starts collection-wide listeners for members, submissions, events, officers, audit logs, deleted members, meeting awards, and transcript entries when the app loads—even before a student signs in. Listener snapshots and document changes count as reads. Therefore, a read reduction from the targeted lookup alone may be small.
+- Check Firebase Console usage and the project's plan to identify whether reads or writes are actually being exhausted; do not assume a reported “60k” limit is specifically a write limit. Firestore reads, writes, and deletes have separate usage metrics; listener reads appear as reads.
+- The checked-in [`firestore.rules`](./firestore.rules) currently permits unauthenticated reads and writes. The officer passcode is checked in client code and is not Firebase authorization. A public deployment with these rules is not secured: client-side validation and transactions cannot stop arbitrary clients from reading or writing the database. Before storing real student data, implement Firebase Authentication and restrictive Firestore rules (or route privileged writes through a trusted backend), then test the rules against every app workflow.
+- Password changes/resets are unavailable because Firebase Authentication is not integrated. The app must not claim that a student password was set or changed.
 
 ---
 
@@ -40,7 +60,7 @@ For **Bulk Point Entries With Student History**, paste one row per student in `s
 
 Students and officer transcript views show Beta-specific and Non-Beta point bars, plus separate approved-hour requirement bars. The 5-hour Beta-specific and 35-hour Non-Beta requirements must each be met independently; earning 40 or more Non-Beta hours does not replace the Beta-specific requirement. Manual point awards count as points only; they do not count as volunteer hours toward the 5-hour Beta-specific requirement.
 
-To verify the Firestore award transaction without touching production data, run `npm run test:bulk-award`. This requires Java and runs against a local Firebase Emulator using disposable test members.
+To verify Firestore behavior without touching production data, run `npm run test:bulk-award` and `npm run test:student-account`. Both use the local Firestore Emulator; the account test exercises simultaneous registrations and legacy duplicate detection. These require Java.
 
 ---
 
@@ -79,13 +99,16 @@ The compiled, production-ready static files will be generated in the `dist/` dir
 
 ---
 
-## Free & School-Safe Deployment Guide
+## Deployment Options
+
+These are hosting options only; they do not secure Firestore. Review the [Firestore usage and security notes](#firestore-usage-and-security) and configure Authentication and restrictive rules before using real student data.
 
 ### Option A: GitHub Pages (Recommended for Schools)
 1. Push this repository to your GitHub account.
-2. In GitHub, go to your repository **Settings** &rarr; **Pages**.
-3. Under **Build and deployment**, select **Source: Deploy from a branch** or use a **GitHub Actions** static workflow.
-4. Your tracker will be live at `https://YOUR_USERNAME.github.io/beta-points-tracker/`.
+2. In GitHub, go to **Settings → Pages** and select **GitHub Actions** as the build and deployment source.
+3. The included [`deploy.yml`](./.github/workflows/deploy.yml) workflow runs `npm run build`, copies the custom-domain [`CNAME`](./CNAME) into `dist/`, and deploys that artifact on pushes to `main` or `master` (or via manual workflow dispatch).
+4. The workflow builds the Vite app from `index.html` and `src/main.tsx`; standalone HTML copies in the repository are not the deployed application.
+5. Confirm the deployment in the repository's **Actions** tab. DNS and the custom-domain setting must also be configured in GitHub Pages.
 
 ### Option B: Vercel (1-Click Deployment)
 1. Go to [Vercel](https://vercel.com) and log in with your GitHub account.
@@ -104,4 +127,6 @@ The compiled, production-ready static files will be generated in the `dist/` dir
 - **Framework**: React 19 + TypeScript + Vite 6
 - **Styling**: Tailwind CSS v4
 - **Icons**: Lucide React
-- **Storage**: Browser LocalStorage & IndexedDB (offline photo slip caching)
+- **Database**: Firebase Cloud Firestore
+- **Browser storage**: LocalStorage for the client session; IndexedDB for offline photo slip caching
+- **Authentication**: Student ID lookup and client-side officer passcode only; Firebase Authentication is not configured

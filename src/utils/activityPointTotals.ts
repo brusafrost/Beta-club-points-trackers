@@ -1,6 +1,9 @@
-import type { EventItem, MeetingPointAward, Member, Submission } from '../types';
+import type { EventItem, MeetingPointAward, Member, OldTranscriptEntry, Submission } from '../types';
+import { BetaStorage } from '../services/storage';
 import { resolveServiceActivityType } from './serviceActivityType';
 import { submissionBelongsToMember } from './submissionBelongsToMember';
+
+const BETA_SPECIFIC_POINT_LIMIT = 5;
 
 export interface ActivityPointTotals {
   betaSpecific: number;
@@ -11,7 +14,8 @@ export function getActivityPointTotals(
   member: Member,
   submissions: Submission[],
   meetingPointAwards: MeetingPointAward[],
-  events: EventItem[]
+  events: EventItem[],
+  oldTranscriptEntries?: OldTranscriptEntry[]
 ): ActivityPointTotals {
   const totals: ActivityPointTotals = { betaSpecific: 0, nonBeta: 0 };
 
@@ -28,9 +32,18 @@ export function getActivityPointTotals(
     .filter(award => award.memberId === member.id)
     .reduce((sum, award) => sum + (award.points || 0), 0);
 
+  const oldTranscriptCarryover = (oldTranscriptEntries || BetaStorage.getOldTranscriptEntriesForMember(member.id))
+    .filter(entry => entry.memberId === member.id)
+    .reduce((sum, entry) => sum + (entry.points || 0), 0);
+
   totals.betaSpecific += memberAwards;
   totals.betaSpecific += (Number(member.manualPointAdjustment) || 0) - memberAwards;
+  totals.betaSpecific += oldTranscriptCarryover;
   totals.betaSpecific = Math.max(0, totals.betaSpecific);
+  if (totals.betaSpecific > BETA_SPECIFIC_POINT_LIMIT) {
+    totals.nonBeta += totals.betaSpecific - BETA_SPECIFIC_POINT_LIMIT;
+    totals.betaSpecific = BETA_SPECIFIC_POINT_LIMIT;
+  }
 
   return totals;
 }

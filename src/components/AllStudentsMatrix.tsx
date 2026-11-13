@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Member, Submission, EventItem, MeetingPointAward } from '../types';
+import { Member, Submission, EventItem, MeetingPointAward, OldTranscriptEntry } from '../types';
 import { Search, Download, BarChart3 } from 'lucide-react';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
 import { getActivityPointTotals } from '../utils/activityPointTotals';
@@ -9,11 +9,12 @@ interface Props {
   submissions: Submission[];
   events: EventItem[];
   meetingPointAwards: MeetingPointAward[];
+  oldTranscriptEntries?: OldTranscriptEntry[];
   isOfficer?: boolean;
   viewerMemberId?: string;
 }
 
-export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, meetingPointAwards, isOfficer = false, viewerMemberId }) => {
+export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, events, meetingPointAwards, oldTranscriptEntries, isOfficer = false, viewerMemberId }) => {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 25;
@@ -26,7 +27,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
     const rows = members.map(m => {
       const key = m.studentId || m.email.toLowerCase().trim();
       const ownApprovedSubs = approved.filter(submission => submissionBelongsToMember(submission, m));
-      const pointTotals = getActivityPointTotals(m, approved, meetingPointAwards, events);
+      const pointTotals = getActivityPointTotals(m, approved, meetingPointAwards, events, oldTranscriptEntries);
       const eventPoints: Record<string, number> = {
         'Beta-specific': pointTotals.betaSpecific,
         'Non-Beta': pointTotals.nonBeta
@@ -50,7 +51,7 @@ export const AllStudentsMatrix: React.FC<Props> = ({ members, submissions, event
     });
 
     return { displayEvents: allEvents, rows };
-  }, [members, submissions, events, meetingPointAwards, isOfficer, viewerMemberId]);
+  }, [members, submissions, events, meetingPointAwards, oldTranscriptEntries, isOfficer, viewerMemberId]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;

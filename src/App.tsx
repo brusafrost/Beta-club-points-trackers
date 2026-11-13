@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthSession, Member, Submission, EventItem, Officer, AppConfig, MeetingPointAward } from './types';
 import { BetaStorage } from './services/storage';
 import { Navbar } from './components/Navbar';
@@ -25,6 +25,10 @@ export default function App() {
   const [meetingPointAwards, setMeetingPointAwards] = useState<MeetingPointAward[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [officers, setOfficers] = useState<Officer[]>([]);
+  const [studentMatrixData, setStudentMatrixData] = useState<Awaited<ReturnType<typeof BetaStorage.loadStudentMatrixData>> | null>(null);
+  const [isLoadingStudentMatrix, setIsLoadingStudentMatrix] = useState(false);
+  const [studentMatrixError, setStudentMatrixError] = useState<string | null>(null);
+  const studentMatrixRequestActive = useRef(false);
 
   const [activeSection, setActiveSection] = useState<string>('dashboard');
   const [selectedProofSub, setSelectedProofSub] = useState<Submission | null>(null);
@@ -42,6 +46,22 @@ export default function App() {
     setOfficers(BetaStorage.getOfficers());
   }, []);
 
+  const loadStudentMatrix = useCallback(() => {
+    if (studentMatrixData || studentMatrixRequestActive.current) return;
+    studentMatrixRequestActive.current = true;
+    setIsLoadingStudentMatrix(true);
+    setStudentMatrixError(null);
+    void BetaStorage.loadStudentMatrixData()
+      .then(setStudentMatrixData)
+      .catch(error => {
+        setStudentMatrixError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        studentMatrixRequestActive.current = false;
+        setIsLoadingStudentMatrix(false);
+      });
+  }, [studentMatrixData]);
+
 
   // Initialize app
   useEffect(() => {
@@ -51,6 +71,7 @@ export default function App() {
       refreshAllData();
       const savedSession = BetaStorage.getSession();
       if (savedSession) {
+        BetaStorage.setSessionDataScope(savedSession);
         setSession(savedSession);
         setActiveSection(savedSession.isOfficer ? 'officer-dash' : 'dashboard');
       }
@@ -59,12 +80,20 @@ export default function App() {
 
 
   const handleLoginSuccess = (newSession: AuthSession) => {
+    BetaStorage.setSessionDataScope(newSession);
+    setStudentMatrixData(null);
+    setStudentMatrixError(null);
+    studentMatrixRequestActive.current = false;
     setSession(newSession);
     refreshAllData();
     setActiveSection(newSession.isOfficer ? 'officer-dash' : 'dashboard');
   };
 
   const handleLogout = () => {
+    BetaStorage.setSessionDataScope(null);
+    setStudentMatrixData(null);
+    setStudentMatrixError(null);
+    studentMatrixRequestActive.current = false;
     BetaStorage.clearSession();
     setSession(null);
     setActiveSection('dashboard');
@@ -114,6 +143,10 @@ export default function App() {
               meetingPointAwards={meetingPointAwards}
               events={events}
               config={config}
+              studentMatrixData={studentMatrixData}
+              isLoadingStudentMatrix={isLoadingStudentMatrix}
+              studentMatrixError={studentMatrixError}
+              onLoadStudentMatrix={loadStudentMatrix}
               onNavigateToSubmit={() => setActiveSection('submit')}
               onViewProof={setSelectedProofSub}
               onRefreshData={refreshAllData}

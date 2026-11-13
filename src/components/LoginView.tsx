@@ -16,8 +16,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [lastName, setLastName] = useState<string>('');
   const [studentId, setStudentId] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [gradeLevel, setGradeLevel] = useState<number>(11);
 
   // Officer form fields
@@ -72,31 +70,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           setIsLoading(false);
           return;
         }
-        if (password && password.length < 6) {
-          setErrorMsg('Password must be at least 6 characters.');
-          setIsLoading(false);
-          return;
-        }
-        if (password !== confirmPassword) {
-          setErrorMsg('Passwords do not match.');
-          setIsLoading(false);
-          return;
-        }
-
-
-
-
-
-
-
-
-
         const res = await BetaStorage.registerMember(
           firstName,
           lastName,
           studentId,
           email,
-          password || undefined,
           gradeLevel
         );
 
@@ -360,45 +338,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-zinc-700 flex justify-between">
-                  <span>{studentMode === 'register' ? 'Create Password (Min 6 chars)' : 'Password'}</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete={studentMode === 'register' ? 'new-password' : 'current-password'}
-                    required={studentMode === 'register'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full min-h-11 px-3 py-2.5 pr-12 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-zinc-500 hover:text-zinc-900"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {studentMode === 'register' && (
-                <div className="space-y-1">
-                  <label className="font-semibold text-zinc-700">Confirm Password</label>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full min-h-11 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl font-mono text-base sm:text-xs text-zinc-900 focus:outline-hidden focus:border-zinc-500"
-                  />
-                </div>
-              )}
+              <p className="text-[11px] text-zinc-500">
+                Student sign-in uses your student ID; password sign-in is not enabled.
+              </p>
 
               <button
                 type="submit"

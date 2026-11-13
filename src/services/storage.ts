@@ -1,8 +1,9 @@
 
-import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus, MeetingPointAward } from '../types';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc } from 'firebase/firestore';
+import { Member, DeletedMember, AuditLog, Submission, EventItem, Officer, AppConfig, AuthSession, SubmissionStatus, MeetingPointAward, OldTranscriptEntry } from '../types';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch, getDocs, getDoc, limit, query, runTransaction, where, or } from 'firebase/firestore';
 import { db } from '../firebase';
 import { awardBulkMeetingPoints } from './bulkMeetingPoints';
+import { parseOldTranscriptImportText } from '../utils/oldTranscriptImportParser';
 import { saveOfficerPointEntry } from './officerPointEntries';
 import { migrateLegacyManualPoints } from './manualPointMigration';
 import { submissionBelongsToMember } from '../utils/submissionBelongsToMember';
@@ -15,10 +16,26 @@ let localMembers: Member[] = [];
 let localDeletedMembers: DeletedMember[] = [];
 let localAuditLogs: AuditLog[] = [];
 let localMeetingPointAwards: MeetingPointAward[] = [];
+let localOldTranscriptEntries: OldTranscriptEntry[] = [];
 let localSubmissions: Submission[] = [];
 let localEvents: EventItem[] = [];
 let localOfficers: Officer[] = [];
 let manualPointMigrationStarted = false;
+let transcriptEntriesUnsubscribe: (() => void) | null = null;
+let transcriptEntriesScope: string | null = null;
+let meetingPointAwardsUnsubscribe: (() => void) | null = null;
+let meetingPointAwardsScope: string | null = null;
+let submissionsUnsubscribe: (() => void) | null = null;
+let submissionsScope: string | null = null;
+let officerCollectionsUnsubscribes: (() => void)[] = [];
+let officerCollectionsEnabled = false;
+let sessionCollectionsUnsubscribes: (() => void)[] = [];
+let sessionCollectionsEnabled = false;
+let studentMatrixDataPromise: Promise<{
+  submissions: Submission[];
+  meetingPointAwards: MeetingPointAward[];
+  oldTranscriptEntries: OldTranscriptEntry[];
+}> | null = null;
 let localConfig: AppConfig = {
   pointCap: 40,
   hoursRate: 1,
@@ -72,56 +89,6 @@ export class BetaStorage {
       triggerChange();
     });
 
-    // Listen to members
-    onSnapshot(collection(db, 'members'), (snap) => {
-      localMembers = snap.docs.map(d => d.data() as Member);
-      triggerChange();
-    });
-
-    onSnapshot(collection(db, 'deletedMembers'), (snap) => {
-      localDeletedMembers = snap.docs.map(d => d.data() as DeletedMember);
-      localDeletedMembers.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
-      triggerChange();
-    });
-
-    onSnapshot(collection(db, 'auditLogs'), (snap) => {
-      localAuditLogs = snap.docs.map(d => d.data() as AuditLog);
-      localAuditLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      triggerChange();
-    });
-
-    onSnapshot(collection(db, 'meetingPointAwards'), (snap) => {
-      localMeetingPointAwards = snap.docs.map(d => d.data() as MeetingPointAward);
-      localMeetingPointAwards.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      triggerChange();
-    });
-
-    if (!manualPointMigrationStarted) {
-      manualPointMigrationStarted = true;
-      void migrateLegacyManualPoints(db).then(result => {
-        if (!result.success) console.error('Could not classify legacy manual point entries:', result.error);
-        else if (result.migrated > 0 || result.removedEvents > 0) triggerChange();
-      });
-    }
-
-    // Listen to submissions
-    onSnapshot(collection(db, 'submissions'), (snap) => {
-      localSubmissions = snap.docs.map(d => d.data() as Submission);
-      localSubmissions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      triggerChange();
-    });
-
-    // Listen to events
-    onSnapshot(collection(db, 'events'), (snap) => {
-      localEvents = snap.docs.map(d => d.data() as EventItem);
-      triggerChange();
-    });
-
-    // Listen to officers
-    onSnapshot(collection(db, 'officers'), (snap) => {
-      localOfficers = snap.docs.map(d => d.data() as Officer);
-      triggerChange();
-    });
   }
 
   // ---- SYNCHRONOUS GETTERS ----
@@ -130,6 +97,178 @@ export class BetaStorage {
   public static getDeletedMembers(): DeletedMember[] { return [...localDeletedMembers]; }
   public static getAuditLogs(): AuditLog[] { return [...localAuditLogs]; }
   public static getMeetingPointAwards(): MeetingPointAward[] { return [...localMeetingPointAwards]; }
+  public static loadStudentMatrixData(): Promise<{
+    submissions: Submission[];
+    meetingPointAwards: MeetingPointAward[];
+    oldTranscriptEntries: OldTranscriptEntry[];
+  }> {
+    if (!studentMatrixDataPromise) {
+      studentMatrixDataPromise = Promise.all([
+        getDocs(collection(db, 'submissions')),
+        getDocs(collection(db, 'meetingPointAwards')),
+        getDocs(collection(db, 'oldTranscriptEntries'))
+      ]).then(([submissions, meetingPointAwards, oldTranscriptEntries]) => ({
+        submissions: submissions.docs.map(document => document.data() as Submission),
+        meetingPointAwards: meetingPointAwards.docs.map(document => document.data() as MeetingPointAward),
+        oldTranscriptEntries: oldTranscriptEntries.docs.map(document => document.data() as OldTranscriptEntry)
+      })).catch(error => {
+        studentMatrixDataPromise = null;
+        throw error;
+      });
+    }
+    return studentMatrixDataPromise;
+  }
+  public static getOldTranscriptEntries(): OldTranscriptEntry[] { return [...localOldTranscriptEntries]; }
+  public static getOldTranscriptEntriesForMember(memberId: string): OldTranscriptEntry[] {
+    return localOldTranscriptEntries.filter(entry => entry.memberId === memberId);
+  }
+  public static setSessionDataScope(session: AuthSession | null): void {
+    const isOfficer = session?.isOfficer === true;
+    this.setTranscriptEntriesScope(session?.memberId, isOfficer);
+
+    if (Boolean(session) !== sessionCollectionsEnabled) {
+      if (session) {
+        sessionCollectionsEnabled = true;
+        sessionCollectionsUnsubscribes = [
+          onSnapshot(collection(db, 'members'), snap => {
+            localMembers = snap.docs.map(d => d.data() as Member);
+            triggerChange();
+          }),
+          onSnapshot(collection(db, 'events'), snap => {
+            localEvents = snap.docs.map(d => d.data() as EventItem);
+            triggerChange();
+          }),
+          onSnapshot(collection(db, 'officers'), snap => {
+            localOfficers = snap.docs.map(d => d.data() as Officer);
+            triggerChange();
+          })
+        ];
+      } else {
+        sessionCollectionsUnsubscribes.forEach(unsubscribe => unsubscribe());
+        sessionCollectionsUnsubscribes = [];
+        sessionCollectionsEnabled = false;
+        localMembers = [];
+        localEvents = [];
+        localOfficers = [];
+      }
+    }
+
+    const meetingScope = isOfficer ? 'officer' : session ? `member:${session.memberId}` : null;
+    if (meetingScope !== meetingPointAwardsScope) {
+      studentMatrixDataPromise = null;
+      meetingPointAwardsUnsubscribe?.();
+      meetingPointAwardsUnsubscribe = null;
+      meetingPointAwardsScope = meetingScope;
+      localMeetingPointAwards = [];
+
+      if (isOfficer) {
+        meetingPointAwardsUnsubscribe = onSnapshot(collection(db, 'meetingPointAwards'), snap => {
+          localMeetingPointAwards = snap.docs.map(d => d.data() as MeetingPointAward);
+          localMeetingPointAwards.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          triggerChange();
+        });
+      } else if (session) {
+        meetingPointAwardsUnsubscribe = onSnapshot(
+          query(collection(db, 'meetingPointAwards'), where('memberId', '==', session.memberId)),
+          snap => {
+            localMeetingPointAwards = snap.docs.map(d => d.data() as MeetingPointAward);
+            localMeetingPointAwards.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            triggerChange();
+          }
+        );
+      }
+    }
+
+    const nextSubmissionScope = isOfficer ? 'officer' : session ? `member:${session.memberId}` : null;
+    if (nextSubmissionScope !== submissionsScope) {
+      submissionsUnsubscribe?.();
+      submissionsUnsubscribe = null;
+      submissionsScope = nextSubmissionScope;
+      localSubmissions = [];
+
+      if (isOfficer) {
+        submissionsUnsubscribe = onSnapshot(collection(db, 'submissions'), snap => {
+          localSubmissions = snap.docs.map(d => d.data() as Submission);
+          localSubmissions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          triggerChange();
+        });
+      } else if (session) {
+        const studentEmail = session.email.trim().toLowerCase();
+        submissionsUnsubscribe = onSnapshot(
+          query(collection(db, 'submissions'), or(
+            where('studentEmail', '==', studentEmail),
+            where('studentId', '==', session.memberId)
+          )),
+          snap => {
+            localSubmissions = snap.docs.map(d => d.data() as Submission);
+            localSubmissions.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            triggerChange();
+          }
+        );
+      }
+    }
+
+    if (isOfficer && !officerCollectionsEnabled) {
+      officerCollectionsEnabled = true;
+      officerCollectionsUnsubscribes = [
+        onSnapshot(collection(db, 'deletedMembers'), snap => {
+          localDeletedMembers = snap.docs.map(d => d.data() as DeletedMember);
+          localDeletedMembers.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+          triggerChange();
+        }),
+        onSnapshot(collection(db, 'auditLogs'), snap => {
+          localAuditLogs = snap.docs.map(d => d.data() as AuditLog);
+          localAuditLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          triggerChange();
+        })
+      ];
+    } else if (!isOfficer && officerCollectionsEnabled) {
+      officerCollectionsUnsubscribes.forEach(unsubscribe => unsubscribe());
+      officerCollectionsUnsubscribes = [];
+      officerCollectionsEnabled = false;
+      localDeletedMembers = [];
+      localAuditLogs = [];
+    }
+
+    if (isOfficer && !manualPointMigrationStarted) {
+      manualPointMigrationStarted = true;
+      void migrateLegacyManualPoints(db).then(result => {
+        if (!result.success) console.error('Could not classify legacy manual point entries:', result.error);
+        else if (result.migrated > 0 || result.removedEvents > 0) triggerChange();
+      });
+    }
+
+    triggerChange();
+  }
+
+  public static setTranscriptEntriesScope(memberId: string | undefined, isOfficer: boolean): void {
+    const scope = isOfficer ? 'officer' : memberId ? `member:${memberId}` : null;
+    if (scope === transcriptEntriesScope) return;
+
+    transcriptEntriesUnsubscribe?.();
+    transcriptEntriesUnsubscribe = null;
+    transcriptEntriesScope = scope;
+    localOldTranscriptEntries = [];
+
+    if (scope === 'officer') {
+      transcriptEntriesUnsubscribe = onSnapshot(collection(db, 'oldTranscriptEntries'), snap => {
+        localOldTranscriptEntries = snap.docs.map(d => d.data() as OldTranscriptEntry);
+        localOldTranscriptEntries.sort((a, b) => new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime());
+        triggerChange();
+      });
+    } else if (memberId) {
+      transcriptEntriesUnsubscribe = onSnapshot(
+        query(collection(db, 'oldTranscriptEntries'), where('memberId', '==', memberId)),
+        snap => {
+          localOldTranscriptEntries = snap.docs.map(d => d.data() as OldTranscriptEntry);
+          localOldTranscriptEntries.sort((a, b) => new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime());
+          triggerChange();
+        }
+      );
+    }
+
+    triggerChange();
+  }
   private static log(action: string, target: string, details: string): void {
     const entry: AuditLog = { id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, action, target, details, timestamp: new Date().toISOString() };
     setDoc(doc(db, 'auditLogs', entry.id), entry);
@@ -195,12 +334,20 @@ export class BetaStorage {
   }
 
   public static async loginStudent(studentId: string): Promise<{ success: boolean; member?: Member; error?: string; token?: string }> {
-    // Await docs directly from firestore to prevent race conditions on slow connections
-    const snap = await getDocs(collection(db, 'members'));
-    const members = snap.docs.map(d => d.data() as Member);
-    const normalizedId = studentId.trim().toLowerCase();
     if (!/^\d{9,10}$/.test(studentId.trim())) return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
-    const matchingMembers = members.filter(m => (m.studentId || '').trim().toLowerCase() === normalizedId);
+    const normalizedId = studentId.trim();
+    let matchingMembers: Member[];
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'members'),
+        where('studentId', '==', normalizedId),
+        limit(2)
+      ));
+      matchingMembers = snap.docs.map(d => d.data() as Member);
+    } catch (error) {
+      console.error('Could not look up the student profile:', error);
+      return { success: false, error: 'Could not check the roster. Please try again.' };
+    }
     if (matchingMembers.length > 1) return { success: false, error: 'This student ID matches multiple profiles. Please ask an officer to correct the roster before signing in.' };
     const member = matchingMembers[0];
     if (!member) return { success: false, error: 'Student ID not found.' };
@@ -225,18 +372,10 @@ export class BetaStorage {
     return { success: false, error: 'Invalid officer code' };
   }
 
-  public static async registerMember(firstName: string, lastName: string, studentId: string, email: string, password?: string, gradeLevel: number = 11): Promise<{ success: boolean; member?: Member; error?: string }> {
-    const normalizedStudentId = studentId.trim().toUpperCase();
+  public static async registerMember(firstName: string, lastName: string, studentId: string, email: string, gradeLevel: number = 11): Promise<{ success: boolean; member?: Member; error?: string }> {
+    const normalizedStudentId = studentId.trim();
     if (!/^\d{9,10}$/.test(studentId.trim())) {
       return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
-    }
-    
-    // Check local cache for immediate feedback, but Firestore setDoc will handle the final safety
-    if (localMembers.some(m => (m.studentId || '').toUpperCase() === normalizedStudentId)) {
-      return { success: false, error: 'Student ID already exists.' };
-    }
-    if (email.trim() && localMembers.some(m => m.email.toLowerCase() === email.toLowerCase())) {
-      return { success: false, error: 'Email already exists.' };
     }
 
     const fullName = `${firstName} ${lastName}`.trim();
@@ -246,12 +385,40 @@ export class BetaStorage {
       id: docId,
       firstName, lastName, name: fullName, email: email.trim().toLowerCase(),
       totalPoints: 0, gradeLevel, studentId: normalizedStudentId,
-      hasPassword: !!password, createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString()
     };
-    
-    // Use { merge: true } to prevent accidental data loss if the document somehow existed
-    await setDoc(doc(db, 'members', docId), newMember, { merge: true });
-    
+
+    try {
+      const [studentMatches, emailMatches] = await Promise.all([
+        getDocs(query(
+          collection(db, 'members'),
+          where('studentId', '==', normalizedStudentId),
+          limit(1)
+        )),
+        newMember.email
+          ? getDocs(query(
+            collection(db, 'members'),
+            where('email', '==', newMember.email),
+            limit(1)
+          ))
+          : Promise.resolve(null)
+      ]);
+      if (!studentMatches.empty) return { success: false, error: 'An account already exists for this student ID. Please sign in or ask an officer to help.' };
+      if (emailMatches && !emailMatches.empty) return { success: false, error: 'Email already exists.' };
+
+      const created = await runTransaction(db, async transaction => {
+        const memberRef = doc(db, 'members', docId);
+        const existingMember = await transaction.get(memberRef);
+        if (existingMember.exists()) return false;
+        transaction.set(memberRef, newMember);
+        return true;
+      });
+      if (!created) return { success: false, error: 'An account already exists for this student ID. Please sign in or ask an officer to help.' };
+    } catch (error) {
+      console.error('Could not register the student profile:', error);
+      return { success: false, error: 'Could not verify or create the account. Please try again.' };
+    }
+
     // Immediately log in the student
     const session: AuthSession = { 
       token: `tok-${Date.now()}`, 
@@ -397,10 +564,6 @@ export class BetaStorage {
     return { added: lines.length, updated: 0, merged: 0 }; // Fake return for instant UI
   }
 
-  public static async changePassword(memberId: string, newPass: string): Promise<{ success: boolean; error?: string }> {
-    return { success: true };
-  }
-
   // ---- SUBMISSIONS & POINTS ----
   public static addSubmission(studentName: string, studentEmail: string, category: string, hours: number, date: string, assignedTo: string, proofUrl: string, comments?: string, studentId?: string): { success: boolean; submission?: Submission; error?: string } {
     const calculatedPoints = Math.round(hours * localConfig.hoursRate * 10) / 10;
@@ -518,6 +681,76 @@ export class BetaStorage {
       setDoc(doc(db, 'members', member.id), { totalPoints: rounded }, { merge: true });
     });
     return 0; // Async
+  }
+
+  public static async importOldTranscriptEntries(rawText: string, defaultSourceYear?: string): Promise<{ success: boolean; saved: number; review: number; duplicate: number; skipped: number; error?: string }> {
+    const parsed = parseOldTranscriptImportText(rawText, defaultSourceYear);
+    if (parsed.rows.length === 0) {
+      return { success: true, saved: 0, review: 0, duplicate: 0, skipped: 0 };
+    }
+
+    const batch = writeBatch(db);
+    let saved = 0;
+    let review = 0;
+    let duplicate = 0;
+
+    for (const row of parsed.rows) {
+      if (row.status !== 'saved') {
+        review += 1;
+        continue;
+      }
+
+      const member = this.getMemberByStudentId(row.studentId) || localMembers.find(m =>
+        m.name.trim().toLowerCase() === row.studentName.trim().toLowerCase()
+      );
+      if (!member) {
+        review += 1;
+        continue;
+      }
+
+      const sourceYear = row.sourceYear || defaultSourceYear || '2024-2025';
+      const alreadyExists = localOldTranscriptEntries.some(entry =>
+        entry.memberId === member.id &&
+        entry.sourceYear === sourceYear &&
+        entry.points === row.points &&
+        entry.category === row.category &&
+        entry.studentId === (member.studentId || row.studentId)
+      );
+      if (alreadyExists) {
+        duplicate += 1;
+        continue;
+      }
+
+      const id = `old-transcript-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const entry: OldTranscriptEntry = {
+        id,
+        memberId: member.id,
+        studentId: member.studentId || row.studentId,
+        studentName: member.name,
+        sourceYear,
+        category: row.category || 'Previous Year History',
+        points: row.points,
+        notes: row.notes || 'Imported from prior transcript',
+        importedAt: new Date().toISOString(),
+        status: 'matched',
+        matchedBy: row.studentId ? 'studentId' : 'name'
+      };
+
+      batch.set(doc(db, 'oldTranscriptEntries', id), entry);
+      saved += 1;
+    }
+
+    if (saved > 0) {
+      await batch.commit();
+    }
+
+    return {
+      success: true,
+      saved,
+      review,
+      duplicate,
+      skipped: review + duplicate,
+    };
   }
 
   public static async batchApproveAllPending(): Promise<{ success: boolean; count: number; skipped: number; capped: number; error?: string }> {
