@@ -433,21 +433,25 @@ export class BetaStorage {
   }
 
   // ---- MEMBERS ----
-  public static updateProfile(memberId: string, firstName: string, lastName: string, newEmail: string, gradeLevel?: number, studentId?: string): { success: boolean; error?: string } {
+  public static async updateProfile(memberId: string, firstName: string, lastName: string, newEmail: string, gradeLevel?: number, studentId?: string): Promise<{ success: boolean; error?: string }> {
     const member = localMembers.find(m => m.id === memberId);
     if (!member) return { success: false, error: 'Member not found.' };
     if (studentId && !/^\d{9,10}$/.test(studentId.trim())) return { success: false, error: 'Student ID must contain 9 or 10 numbers.' };
     const duplicate = studentId && localMembers.some(m => m.id !== memberId && m.studentId === studentId.trim());
     if (duplicate) return { success: false, error: 'Student ID already belongs to another member.' };
-    setDoc(doc(db, 'members', member.id), {
-      firstName,
-      lastName,
-      name: `${firstName} ${lastName}`.trim(),
-      email: newEmail.toLowerCase(),
-      gradeLevel: gradeLevel || member.gradeLevel,
-      studentId: studentId?.trim() || member.studentId
-    }, { merge: true });
-    return { success: true };
+    try {
+      await setDoc(doc(db, 'members', member.id), {
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`.trim(),
+        email: newEmail.toLowerCase(),
+        gradeLevel: gradeLevel || member.gradeLevel,
+        studentId: studentId?.trim() || member.studentId
+      }, { merge: true });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   public static async setMemberTotalPoints(memberId: string, desiredTotal: number): Promise<{ success: boolean; error?: string }> {
@@ -565,7 +569,7 @@ export class BetaStorage {
   }
 
   // ---- SUBMISSIONS & POINTS ----
-  public static addSubmission(studentName: string, studentEmail: string, category: string, hours: number, date: string, assignedTo: string, proofUrl: string, comments?: string, studentId?: string): { success: boolean; submission?: Submission; error?: string } {
+  public static async addSubmission(studentName: string, studentEmail: string, category: string, hours: number, date: string, assignedTo: string, proofUrl: string, comments?: string, studentId?: string): Promise<{ success: boolean; submission?: Submission; error?: string }> {
     const calculatedPoints = Math.round(hours * localConfig.hoursRate * 10) / 10;
     const subId = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const finalCategory = category.trim();
@@ -575,11 +579,15 @@ export class BetaStorage {
       category: finalCategory, hours, points: calculatedPoints, date, assignedTo: assignedTo.trim() || 'Officer',
       proofUrl: proofUrl || '', status: 'Pending', timestamp: new Date().toISOString(), comments: comments ? comments.trim() : ''
     };
-    setDoc(doc(db, 'submissions', subId), newSub);
-    return { success: true, submission: newSub };
+    try {
+      await setDoc(doc(db, 'submissions', subId), newSub);
+      return { success: true, submission: newSub };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
-  public static addDirectCommentToOfficers(studentName: string, studentEmail: string, inquiryTopic: string, comments: string, assignedTo?: string, studentId?: string): { success: boolean; submission?: Submission; error?: string } {
+  public static async addDirectCommentToOfficers(studentName: string, studentEmail: string, inquiryTopic: string, comments: string, assignedTo?: string, studentId?: string): Promise<{ success: boolean; submission?: Submission; error?: string }> {
     return this.addSubmission(studentName, studentEmail, inquiryTopic || 'Direct Officer Inquiry', 0, new Date().toISOString().split('T')[0], assignedTo || 'Officer', '', comments, studentId);
   }
 

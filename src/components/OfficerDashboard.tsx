@@ -328,7 +328,7 @@ export const OfficerDashboard: React.FC<OfficerDashboardProps> = ({
       showToast({ title: 'Points Not Saved', message: pointsResult.error || 'Unable to save point total.', type: 'error' });
       return;
     }
-    const profileResult = BetaStorage.updateProfile(editingMember.id, firstName, lastName, email, editMemGrade);
+    const profileResult = await BetaStorage.updateProfile(editingMember.id, firstName, lastName, email, editMemGrade);
     if (!profileResult.success) {
       showToast({ title: 'Profile Not Saved', message: profileResult.error || 'Unable to save profile.', type: 'error' });
       return;

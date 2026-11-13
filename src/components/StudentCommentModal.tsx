@@ -28,7 +28,7 @@ export const StudentCommentModal: React.FC<StudentCommentModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) {
       setError('Please enter your comment or question.');
@@ -40,7 +40,7 @@ export const StudentCommentModal: React.FC<StudentCommentModalProps> = ({
     setError('');
 
     try {
-      const res = BetaStorage.addDirectCommentToOfficers(
+      const res = await BetaStorage.addDirectCommentToOfficers(
         member.name,
         member.email,
         topic,
@@ -66,9 +66,10 @@ export const StudentCommentModal: React.FC<StudentCommentModalProps> = ({
         setError(res.error || 'Failed to send comment.');
         showToast({ title: 'Send Error', message: res.error || 'Failed to send comment.', type: 'error' });
       }
-    } catch {
-      setError('An unexpected error occurred.');
-      showToast({ title: 'Error', message: 'Could not deliver message.', type: 'error' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setError(message);
+      showToast({ title: 'Send Error', message, type: 'error' });
     } finally {
       setIsSubmitting(false);
     }

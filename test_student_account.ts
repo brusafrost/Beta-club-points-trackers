@@ -26,6 +26,7 @@ const accountRef = doc(db, 'members', studentId);
 const legacyDuplicateRef = doc(db, 'members', `${studentId}-legacy`);
 const ownSubmissionRef = doc(db, 'submissions', `scope-own-${studentId}`);
 const otherSubmissionRef = doc(db, 'submissions', `scope-other-${studentId}`);
+const createdSubmissionIds: string[] = [];
 
 async function run(): Promise<void> {
   try {
@@ -87,6 +88,43 @@ async function run(): Promise<void> {
       'a student submission listener must return only that student’s records'
     );
 
+    const savedSubmission = await BetaStorage.addSubmission(
+      expectedOriginalName,
+      registeredAccount?.email || '',
+      'Emulator Save Test',
+      1,
+      new Date().toISOString().slice(0, 10),
+      'Officer',
+      '',
+      'Testing confirmed writes',
+      studentId
+    );
+    assert.equal(savedSubmission.success, true);
+    assert.ok(savedSubmission.submission);
+    createdSubmissionIds.push(savedSubmission.submission.id);
+    assert.equal(
+      (await getDoc(doc(db, 'submissions', savedSubmission.submission.id))).exists(),
+      true,
+      'submission save must resolve only after Firestore stores the record'
+    );
+
+    const savedMessage = await BetaStorage.addDirectCommentToOfficers(
+      expectedOriginalName,
+      registeredAccount?.email || '',
+      'Emulator Message Test',
+      'Testing confirmed officer message writes',
+      'Officer',
+      studentId
+    );
+    assert.equal(savedMessage.success, true);
+    assert.ok(savedMessage.submission);
+    createdSubmissionIds.push(savedMessage.submission.id);
+    assert.equal(
+      (await getDoc(doc(db, 'submissions', savedMessage.submission.id))).exists(),
+      true,
+      'officer message save must resolve only after Firestore stores the record'
+    );
+
     BetaStorage.setSessionDataScope(null);
     assert.deepEqual(BetaStorage.getSubmissions(), [], 'logging out clears student-scoped submission data');
     console.log('Student account emulator test passed: concurrent duplicate registration, safe existing-profile handling, targeted sign-in, and legacy duplicate detection.');
@@ -96,7 +134,8 @@ async function run(): Promise<void> {
       accountRef,
       legacyDuplicateRef,
       ownSubmissionRef,
-      otherSubmissionRef
+      otherSubmissionRef,
+      ...createdSubmissionIds.map(id => doc(db, 'submissions', id))
     ].map(reference => deleteDoc(reference).catch(() => undefined)));
     await terminate(db);
   }

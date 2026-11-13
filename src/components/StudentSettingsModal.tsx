@@ -28,7 +28,7 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileMsg(null);
 
@@ -39,20 +39,26 @@ export const StudentSettingsModal: React.FC<StudentSettingsModalProps> = ({
     }
 
     setIsSaving(true);
-    const res = BetaStorage.updateProfile(member.id, firstName, lastName, email, gradeLevel);
-    setIsSaving(false);
-
-    if (res.success) {
-      setProfileMsg({ type: 'success', text: 'Profile updated! All past submissions have been synced.' });
-      showToast({
-        title: 'Profile Updated',
-        message: 'Your name, email, and grade level have been updated and synced.',
-        type: 'success'
-      });
-      onProfileUpdated();
-    } else {
-      setProfileMsg({ type: 'error', text: res.error || 'Failed to update profile.' });
-      showToast({ title: 'Update Failed', message: res.error || 'Could not update profile.', type: 'error' });
+    try {
+      const res = await BetaStorage.updateProfile(member.id, firstName, lastName, email, gradeLevel);
+      if (res.success) {
+        setProfileMsg({ type: 'success', text: 'Profile updated! All past submissions have been synced.' });
+        showToast({
+          title: 'Profile Updated',
+          message: 'Your name, email, and grade level have been updated and synced.',
+          type: 'success'
+        });
+        onProfileUpdated();
+      } else {
+        setProfileMsg({ type: 'error', text: res.error || 'Failed to update profile.' });
+        showToast({ title: 'Update Failed', message: res.error || 'Could not update profile.', type: 'error' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setProfileMsg({ type: 'error', text: message });
+      showToast({ title: 'Update Failed', message, type: 'error' });
+    } finally {
+      setIsSaving(false);
     }
   };
 

@@ -59,7 +59,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -89,7 +89,7 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
     setIsSubmitting(true);
 
     try {
-      const result = BetaStorage.addSubmission(
+      const result = await BetaStorage.addSubmission(
         member.name,
         member.email,
         finalCategory,
@@ -124,9 +124,10 @@ export const SubmissionForm: React.FC<SubmissionFormProps> = ({
       setCustomCategory('');
 
       onSubmitSuccess();
-    } catch {
-      setErrorMsg('An unexpected error occurred while saving.');
-      showToast({ title: 'Error', message: 'Failed to record submission.', type: 'error' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorMsg(message);
+      showToast({ title: 'Submission Failed', message, type: 'error' });
     } finally {
       setIsSubmitting(false);
     }

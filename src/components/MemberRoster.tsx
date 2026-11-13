@@ -208,7 +208,7 @@ export const MemberRoster: React.FC<MemberRosterProps> = ({
       showToast({ title: 'Points Not Saved', message: pointsResult.error || 'Could not update member points.', type: 'error' });
       return;
     }
-    const res = BetaStorage.updateProfile(id, editFirstName, editLastName, editEmail, editGrade, editStudentId);
+    const res = await BetaStorage.updateProfile(id, editFirstName, editLastName, editEmail, editGrade, editStudentId);
     if (res.success) {
       setEditingId(null);
       showToast({
